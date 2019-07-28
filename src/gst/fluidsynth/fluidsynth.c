@@ -723,14 +723,14 @@ gstbt_fluid_synth_init (GstBtFluidSynth * src)
       new_fluid_midi_router (src->settings,
       fluid_synth_handle_midi_event, src->fluid);
   if (src->midi_router) {
-			src->cmd_handler = new_fluid_cmd_handler(src->fluid);
-			if (src->cmd_handler) {
-					src->midi = new_fluid_midi_driver (src->settings,
-																						 fluid_midi_router_handle_midi_event,
-																						 (void *) (src->midi_router));
-			} else {
-					g_warning ("Failed to create FluidSynth MIDI cmd handler");
-			}
+      src->cmd_handler = new_fluid_cmd_handler(src->fluid);
+      if (src->cmd_handler) {
+          src->midi = new_fluid_midi_driver (src->settings,
+                                             fluid_midi_router_handle_midi_event,
+                                             (void *) (src->midi_router));
+      } else {
+          g_warning ("Failed to create FluidSynth MIDI cmd handler");
+      }
     if (!src->midi)
       g_warning ("Failed to create FluidSynth MIDI input driver");
   } else

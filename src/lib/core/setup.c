@@ -1890,7 +1890,7 @@ bt_setup_get_unique_machine_id (const BtSetup * const self,
   gchar *const ptr = &id[strlen (base_name) + 1];
   int ptr_len = strlen(ptr);
   do {
-    g_snprintf (ptr, ptr_len, "%02u", i++);
+    (void) g_snprintf (ptr, ptr_len, "%02u", i++);
     g_object_try_unref (machine);
   } while ((machine = bt_setup_get_machine_by_id (self, id)) && (i < 100));
   g_object_try_unref (machine);

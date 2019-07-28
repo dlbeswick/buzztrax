@@ -414,12 +414,11 @@ bt_song_io_load (BtSongIO const *self, const BtSong * const song, GError ** err)
 
   const gchar *const msg = _("Loading file '%s'");
   if (self->priv->file_name) {
-	int len = 1 + strlen (msg) + strlen (self->priv->file_name);
-    status = g_alloca (len);
-    g_snprintf (status, len, msg, self->priv->file_name);
+    status = g_alloca (1 + strlen (msg) + strlen (self->priv->file_name));
+    g_sprintf (status, msg, self->priv->file_name);
     GST_INFO ("loading song [%s]", self->priv->file_name);
   } else {
-	int len = 1 + strlen (msg) + 4;
+    gint len = 1 + strlen (msg) + 4;
     status = g_alloca (len);
     g_snprintf (status, len, msg, "data");
     GST_INFO ("loading song [<data>]");
@@ -489,12 +488,11 @@ bt_song_io_save (BtSongIO const *self, const BtSong * const song, GError ** err)
 
   const gchar *const msg = _("Saving file '%s'");
   if (self->priv->file_name) {
-	int len = 1 + strlen (msg) + strlen (self->priv->file_name);
-    status = g_alloca (len);
-    g_snprintf (status, len, msg, self->priv->file_name);
+    status = g_alloca (1 + strlen (msg) + strlen (self->priv->file_name));
+    g_sprintf (status, msg, self->priv->file_name);
     GST_INFO ("saving song [%s]", self->priv->file_name);
   } else {
-	int len = 1 + strlen (msg) + 4;
+    gint len = 1 + strlen (msg) + 4;
     status = g_alloca (len);
     g_snprintf (status, len, msg, "data");
     GST_INFO ("saving song [<data>]");
