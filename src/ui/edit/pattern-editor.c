@@ -103,7 +103,7 @@ to_string_note (gchar * buf, gint bufsize, gfloat value, gint def)
   static gchar note_names[] = "C-C#D-D#E-F-F#G-G#A-A#B-????????";
   gint note = ((gint) value) & 255, octave;
 
-  g_return_val_if_fail(bufsize >= 4, 255);
+  g_return_val_if_fail(bufsize >= 4, "ERR");
   if (note == def || note == 0)
 	return "...";
   if (note == 255)

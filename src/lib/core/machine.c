@@ -779,7 +779,7 @@ bt_machine_make_internal_element (const BtMachine * const self,
   GstElement *m;
   GstElementFactory *f;
   const gchar *const parent_name = GST_OBJECT_NAME (self);
-  int len_name = strlen (parent_name) + 2 + strlen (element_name);
+  gint len_name = strlen (parent_name) + 2 + strlen (element_name);
   gchar *const name =
       g_alloca (len_name);
   GValue item = { 0, };
