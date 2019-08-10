@@ -1607,9 +1607,8 @@ make_int_range_widget (const BtMachinePropertiesDialog * self,
   gtk_range_set_value (GTK_RANGE (widget), value);
   // TODO(ensonic): add numerical entry as well ?
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_int_range_property_notify), (gpointer) widget);
   g_signal_connect (widget, "value-changed",
@@ -1640,9 +1639,8 @@ make_uint_range_widget (const BtMachinePropertiesDialog * self,
   gtk_range_set_value (GTK_RANGE (widget), value);
   // TODO(ensonic): add numerical entry as well ?
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_uint_range_property_notify), (gpointer) widget);
   g_signal_connect (widget, "value-changed",
@@ -1673,9 +1671,8 @@ make_uint64_range_widget (const BtMachinePropertiesDialog * self,
   gtk_scale_set_draw_value (GTK_SCALE (widget), /*TRUE*/ FALSE);
   gtk_range_set_value (GTK_RANGE (widget), (gdouble) value);
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_uint64_range_property_notify), (gpointer) widget);
   g_signal_connect (widget, "value-changed",
@@ -1711,9 +1708,8 @@ make_float_range_widget (const BtMachinePropertiesDialog * self,
   gtk_range_set_value (GTK_RANGE (widget), value);
   // TODO(ensonic): add numerical entry as well ?
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_float_range_property_notify), (gpointer) widget);
   g_signal_connect (widget, "value-changed",
@@ -1747,9 +1743,8 @@ make_double_range_widget (const BtMachinePropertiesDialog * self,
   gtk_range_set_value (GTK_RANGE (widget), value);
   // TODO(ensonic): add numerical entry as well ?
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_double_range_property_notify), (gpointer) widget);
   g_signal_connect (widget, "value-changed",
@@ -1817,9 +1812,8 @@ make_combobox_widget (const BtMachinePropertiesDialog * self, GObject * machine,
         value, property->name);
   }
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_combobox_property_notify), (gpointer) widget);
   g_signal_connect (widget, "changed",
@@ -1846,9 +1840,8 @@ make_checkbox_widget (const BtMachinePropertiesDialog * self, GObject * machine,
   widget = gtk_check_button_new ();
   gtk_toggle_button_set_active (GTK_TOGGLE_BUTTON (widget), value);
 
-  const gint len = 9 + strlen (property->name);
-  signal_name = g_alloca (len);
-  g_snprintf (signal_name, len, "notify::%s", property->name);
+  signal_name = g_alloca (9 + strlen (property->name));
+  g_sprintf (signal_name, "notify::%s", property->name);
   g_signal_connect (machine, signal_name,
       G_CALLBACK (on_checkbox_property_notify), (gpointer) widget);
   g_signal_connect (widget, "toggled",

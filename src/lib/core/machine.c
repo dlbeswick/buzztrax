@@ -1992,7 +1992,7 @@ bt_machine_get_unique_pattern_name (const BtMachine * const self)
   g_return_val_if_fail (BT_IS_MACHINE (self), NULL);
 
   do {
-    (void) g_snprintf (name, sizeof(name), "%02u", i++);
+    (void) g_sprintf (name, "%02u", i++);
     g_object_try_unref (pattern);
   } while ((pattern = bt_machine_get_pattern_by_name (self, name))
       && (i < 100));

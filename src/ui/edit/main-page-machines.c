@@ -1476,9 +1476,9 @@ on_canvas_motion (ClutterActor * actor, ClutterEvent * event,
     clutter_event_store_cursor_pos (self, event);
     g_object_try_unref (p->new_wire_dst);
     p->new_wire_dst = get_machine_canvas_item_under_cursor (self);
-	if (p->new_wire_dst) {
-	  g_object_ref(p->new_wire_dst);
-	}
+    if (p->new_wire_dst) {
+        g_object_ref(p->new_wire_dst);
+    }
     update_connect (self);
     res = TRUE;
   } else if (self->priv->dragging) {

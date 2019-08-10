@@ -105,9 +105,9 @@ to_string_note (gchar * buf, gint bufsize, gfloat value, gint def)
 
   g_return_val_if_fail (bufsize >= 4, "ERR");
   if (note == def || note == 0)
-	return "...";
+    return "...";
   if (note == 255)
-	return "off";
+    return "off";
 
   note--;
   octave = note >> 4;
