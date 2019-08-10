@@ -1,8 +1,24 @@
+@YELP_HELP_RULES@
+HELP_ID = buzztrax-edit
+
+HELP_FILES = \
+	index.docbook \
+	legal.xml \
+	version.entities
+
+HELP_MEDIA = $(patsubst C/%,%,$(wildcard C/figures/*.png))
+
+# We have no translation for the manual
+HELP_LINUAGS =
+
 SUBDIRS = C
 
-DOC_MODULE = buzztrax-edit
-
 EXTRA_DIST = C/aspell.pws
+
+version.entities: $(abs_top_srcdir)/docs/version.entities
+	@cp $< $@
+
+CLEANFILES = version.entities
 
 if WITH_ASPELL
 check-local:
