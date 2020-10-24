@@ -171,22 +171,23 @@ gtk_target_table_make (GdkAtom format_atom, gint * n_targets)
 void
 gtk_show_uri_simple (GtkWidget * widget, const gchar * uri)
 {
-  GError *error = NULL;
+  //  GError *error = NULL;
 
   g_return_if_fail (widget);
   g_return_if_fail (uri);
 
 #if GTK_CHECK_VERSION (3, 22, 0)
-    GtkWidget *toplevel = gtk_widget_get_toplevel (widget);
+    // DO NOT COMMIT
+  /*GtkWidget *toplevel = gtk_widget_get_toplevel (widget);
     if (!gtk_widget_is_toplevel (toplevel)) {
       GST_WARNING ("Failed lookup widgets window\n");
     }
     GtkWindow *window = GTK_WINDOW(toplevel);
 
-  if (!gtk_show_uri_on_window (window, uri,gtk_get_current_event_time (), &error)) {
+    if (!gtk_show_uri_on_window (window, uri,gtk_get_current_event_time (), &error)) {
     GST_WARNING ("Failed to display help: %s\n", error->message);
     g_error_free (error);
-  }
+    }*/
 #else
   GdkScreen *screen = gtk_widget_get_screen (widget);
 
