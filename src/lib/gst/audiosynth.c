@@ -305,6 +305,7 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
   gdouble samples_done;
   guint samples_per_buffer;
   gboolean partial_buffer = FALSE;
+  
 
   if (G_UNLIKELY (src->eos_reached)) {
     GST_WARNING_OBJECT (src, "EOS reached");
@@ -423,16 +424,20 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
   src->running_time = next_running_time;
   src->n_samples = n_samples;
 
-  if (gst_buffer_map (buf, &info, GST_MAP_WRITE)) {
-    if (klass->process && !klass->process (src, buf, &info)) {
-      memset (info.data, 0, info.size);
-      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_GAP);
+  if (klass->process) {
+    if (gst_buffer_map (buf, &info, GST_MAP_WRITE)) {
+      if (!klass->process (src, buf, &info)) {
+        memset (info.data, 0, info.size);
+        GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_GAP);
+      }
+      gst_buffer_unmap (buf, &info);
+    } else {
+      GST_WARNING_OBJECT (src, "unable to map buffer for write");
     }
-    gst_buffer_unmap (buf, &info);
+    *buffer = buf;
   } else {
-    GST_WARNING_OBJECT (src, "unable to map buffer for write");
+    GST_ERROR_OBJECT (src, "'process' function not defined");
   }
-  *buffer = buf;
 
   return GST_FLOW_OK;
 }

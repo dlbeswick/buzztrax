@@ -1756,12 +1756,6 @@ bt_main_page_machines_init_ui (const BtMainPageMachines * self,
   self->priv->stage =
 	CLUTTER_STAGE(gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (self->
 											  priv->canvas_widget)));
-  clutter_stage_set_use_alpha (self->priv->stage, TRUE);
-  style = gtk_widget_get_style_context (self->priv->canvas_widget);
-  on_canvas_style_updated (style, (gpointer) self);
-  g_signal_connect_after (style, "changed",
-      G_CALLBACK (on_canvas_style_updated), (gpointer) self);
-
   self->priv->canvas = clutter_actor_new ();
   clutter_actor_set_reactive (self->priv->canvas, TRUE);
   clutter_actor_set_size (self->priv->canvas, MACHINE_VIEW_W, MACHINE_VIEW_H);
@@ -1773,6 +1767,12 @@ bt_main_page_machines_init_ui (const BtMainPageMachines * self,
   clutter_actor_set_content (self->priv->canvas, self->priv->grid_canvas);
   clutter_actor_set_content_scaling_filters (self->priv->canvas,
       CLUTTER_SCALING_FILTER_TRILINEAR, CLUTTER_SCALING_FILTER_LINEAR);
+
+  clutter_stage_set_use_alpha (self->priv->stage, TRUE);
+  style = gtk_widget_get_style_context (self->priv->canvas_widget);
+  on_canvas_style_updated (style, (gpointer) self);
+  g_signal_connect_after (style, "changed",
+      G_CALLBACK (on_canvas_style_updated), (gpointer) self);
 
   g_signal_connect_object (self->priv->grid_canvas, "draw",
       G_CALLBACK (on_grid_draw), (gpointer) self, 0);
