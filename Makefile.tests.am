@@ -40,15 +40,15 @@ CHECK_REGISTRY = $(top_builddir)/tests/test-registry.reg
 AM_TESTS_ENVIRONMENT = \
 	CK_DEFAULT_TIMEOUT=20 \
 	LANG=C \
-	XDG_CACHE_HOME=$(abs_builddir) \
-	XDG_DATA_HOME=$(abs_builddir) \
+	XDG_CACHE_HOME=$(abs_top_builddir) \
+	XDG_DATA_HOME=$(abs_top_builddir) \
 	GSETTINGS_BACKEND=memory \
 	GSETTINGS_SCHEMA_DIR=$(abs_top_builddir) \
 	NO_AT_BRIDGE=1 \
 	GST_DEBUG_FILE=/dev/null \
 	GST_REGISTRY_1_0=$(CHECK_REGISTRY) \
 	GST_PLUGIN_SYSTEM_PATH_1_0= \
-	GST_PLUGIN_PATH_1_0=$(top_builddir)/.libs:$(GST_PLUGINS_DIR) \
+	GST_PLUGIN_PATH_1_0=$(abs_top_builddir)/.libs:$(GST_PLUGINS_DIR) \
 	BML_PATH=$(top_builddir)/.libs \
 	$(LIBTOOL) --mode=execute
 
@@ -116,7 +116,7 @@ libbt_check_ui_la_CFLAGS = $(GUI_DEPS_CFLAGS) $(CHECK_CFLAGS)
 libbt_check_ui_la_SOURCES = \
 	tests/bt-check-ui.c tests/bt-check-ui.h
 
-# Oh dear, litool. We need to add the -rpath in LDFLAGS to force it to build
+# Oh dear, libtool. We need to add the -rpath in LDFLAGS to force it to build
 # a .so instead of only the .la (deficiency of check_LTLIBRARIES instead of
 # lib_LTLIBRARIES)
 # - https://lists.gnu.org/archive/html/automake/2005-10/msg00107.html
@@ -308,6 +308,7 @@ libbt_edit_check_la_SOURCES = tests/ui/edit/m-bt-edit.h \
 	tests/ui/edit/e-settings-dialog.c \
 	tests/ui/edit/e-signal-analysis-dialog.c \
 	tests/ui/edit/e-tip-dialog.c \
+	tests/ui/edit/e-tools.c \
 	tests/ui/edit/e-ui-resources.c \
 	tests/ui/edit/e-wave-list-model.c \
 	tests/ui/edit/e-wavelevel-list-model.c \
@@ -516,7 +517,7 @@ VALPREFIX = \
 	G_SLICE=always-malloc G_DEBUG=gc-friendly \
 	GLIBCPP_FORCE_NEW=1 GLIBCXX_FORCE_NEW=1
 VALDEFAULT = @VALGRIND@/bin/valgrind
-VALSUPP = @VALGRIND@/lib/valgrind
+VALSUPP = @VALGRIND@/lib/x86_64-linux-gnu/valgrind
 VALSUPPRESSIONDEF = --suppressions=$(VALSUPP)/default.supp
 VALSUPPRESSIONOWN = --suppressions=$(top_builddir)/buzztrax.supp \
 	--suppressions=$(top_builddir)/gst.supp \

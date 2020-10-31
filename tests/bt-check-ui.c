@@ -31,6 +31,8 @@
 #include <stdlib.h>
 //-- glib
 #include <glib/gstdio.h>
+//-- gdk
+#include <gdk/gdkx.h>
 //-- gstreamer
 #include <gst/gst.h>
 
@@ -213,61 +215,13 @@ check_setup_test_display (void)
   if (display_number > -1) {
     // activate the display for use with gtk
     if ((display_manager = gdk_display_manager_get ())) {
-      GdkScreen *default_screen;
-      GtkSettings *default_settings;
-      gchar *theme_name;
-
-      default_display =
-          gdk_display_manager_get_default_display (display_manager);
-      if ((default_screen = gdk_display_get_default_screen (default_display))) {
-        /* this block when protected by gdk_threads_enter() and crashes if not :( */
-        //gdk_threads_enter();
-        if ((default_settings = gtk_settings_get_for_screen (default_screen))) {
-          g_object_get (default_settings, "gtk-theme-name", &theme_name, NULL);
-          GST_INFO ("current theme is \"%s\"", theme_name);
-          //g_object_unref(default_settings);
-        } else
-          GST_WARNING ("can't get default_settings");
-        //gdk_threads_leave();
-        //g_object_unref(default_screen);
-      } else
-        GST_WARNING ("can't get default_screen");
-
       if ((test_display = gdk_display_open (display_name))) {
-#if 0
-        GdkScreen *test_screen;
-
-        if ((test_screen = gdk_display_get_default_screen (test_display))) {
-          GtkSettings *test_settings;
-
-          if ((test_settings = gtk_settings_get_for_screen (test_screen))) {
-            // this just switches to the default theme
-            //g_object_set(test_settings,"gtk-theme-name",NULL,NULL);
-            /* Is there a bug in gtk+? None of this reliable creates a working
-             * theme setup
-             */
-            //g_object_set(test_settings,"gtk-theme-name",theme_name,NULL);
-            /* Again this shows no effect */
-            //g_object_set(test_settings,"gtk-toolbar-style",GTK_TOOLBAR_ICONS,NULL);
-            //gtk_rc_reparse_all_for_settings(test_settings,TRUE);
-            //gtk_rc_reset_styles(test_settings);
-            GST_INFO ("theme switched ");
-            //g_object_unref(test_settings);
-          } else
-            GST_WARNING ("can't get test_settings on display: \"%s\"",
-                display_name);
-          //g_object_unref(test_screen);
-        } else
-          GST_WARNING ("can't get test_screen on display: \"%s\"",
-              display_name);
-#endif
         gdk_display_manager_set_default_display (display_manager, test_display);
         GST_INFO ("display %p,\"%s\" is active", test_display,
             gdk_display_get_name (test_display));
       } else {
         GST_WARNING ("failed to open display: \"%s\"", display_name);
       }
-      //g_free(theme_name);
     } else {
       GST_WARNING ("can't get display-manager");
     }
@@ -335,27 +289,72 @@ check_shutdown_test_server (void)
 
 // gtk+ gui screenshooter
 
-static GdkPixbuf *
-make_screenshot (GtkWidget * widget)
+// https://gitlab.gnome.org/GNOME/gtk/blob/gtk-3-24/testsuite/reftests/reftest-snapshot.c#L96
+
+static gboolean
+quit_when_idle (gpointer loop)
+{
+  g_main_loop_quit (loop);
+  return G_SOURCE_REMOVE;
+}
+
+static void
+check_for_draw (GdkEvent * event, gpointer data)
+{
+  if (event->type == GDK_EXPOSE) {
+    g_idle_add (quit_when_idle, (GMainLoop *) data);
+    gdk_event_handler_set ((GdkEventFunc) gtk_main_do_event, NULL, NULL);
+  }
+  gtk_main_do_event (event);
+}
+
+static cairo_surface_t *
+make_screenshot (GtkWidget * widget, gint * iw, gint * ih)
 {
   GdkWindow *window = gtk_widget_get_window (widget);
-  gint ww, wh;
+  GMainLoop *loop;
+  gint w, h;
+  cairo_surface_t *surface;
+  cairo_t *cr;
 
-  // make sure the window gets drawn
-  if (!gtk_widget_get_visible (widget)) {
-    gtk_widget_show_all (widget);
+  g_assert (gtk_widget_get_realized (widget));
+  g_assert (iw);
+  g_assert (ih);
+
+  loop = g_main_loop_new (NULL, FALSE);
+
+  /* We wait until the widget is drawn for the first time.
+   * We can not wait for a GtkWidget::draw event, because that might not
+   * happen if the window is fully obscured by windowed child widgets.
+   * Alternatively, we could wait for an expose event on widget's window.
+   * Both of these are rather hairy, not sure what's best.
+   */
+  gdk_event_handler_set (check_for_draw, loop, NULL);
+  g_main_loop_run (loop);
+
+  w = gtk_widget_get_allocated_width (widget);
+  h = gtk_widget_get_allocated_height (widget);
+  surface = gdk_window_create_similar_surface (window,
+      CAIRO_CONTENT_COLOR, w, h);
+
+  cr = cairo_create (surface);
+
+  if (gdk_window_get_window_type (window) == GDK_WINDOW_TOPLEVEL ||
+      gdk_window_get_window_type (window) == GDK_WINDOW_FOREIGN) {
+    // give the WM/server some time to sync. They need it.
+    gdk_display_sync (gdk_window_get_display (window));
+    g_timeout_add (500, quit_when_idle, loop);
+    g_main_loop_run (loop);
   }
-  if (GTK_IS_WINDOW (widget)) {
-    gtk_window_present (GTK_WINDOW (widget));
-    //gtk_window_move(GTK_WINDOW(widget),30,30);
-  }
-  gtk_widget_queue_draw (widget);
-  flush_main_loop ();
+  gdk_cairo_set_source_window (cr, window, 0, 0);
+  cairo_paint (cr);
 
-  // TODO: cairo_surface_flush()
+  cairo_destroy (cr);
+  g_main_loop_unref (loop);
 
-  gdk_window_get_geometry (window, NULL, NULL, &ww, &wh);
-  return gdk_pixbuf_get_from_window (window, 0, 0, ww, wh);
+  *iw = w;
+  *ih = h;
+  return surface;
 }
 
 // creates files names under the test data dir
@@ -445,35 +444,33 @@ add_shadow_and_save (cairo_surface_t * image, gchar * filename, gint iw,
 void
 check_make_widget_screenshot (GtkWidget * widget, const gchar * name)
 {
-  GdkPixbuf *pixbuf, *scaled_pixbuf;
-  gint iw, ih;
   gchar *filename;
+  gint iw, ih;
   cairo_surface_t *surface;
   cairo_t *cr;
 
   g_return_if_fail (GTK_IS_WIDGET (widget));
 
-  filename = make_filename (widget, name);
-
-  pixbuf = make_screenshot (widget);
-  iw = gdk_pixbuf_get_width (pixbuf) * 0.75;
-  ih = gdk_pixbuf_get_height (pixbuf) * 0.75;
-  scaled_pixbuf = gdk_pixbuf_scale_simple (pixbuf, iw, ih, GDK_INTERP_HYPER);
-  //gdk_pixbuf_save(scaled_pixbuf,filename,"png",NULL,NULL);
+  cairo_surface_t *gtk_win_surface = make_screenshot (widget, &iw, &ih);
+  iw *= 0.75;
+  ih *= 0.75;
 
   // create a image surface with screenshot
   surface = cairo_image_surface_create (CAIRO_FORMAT_ARGB32, iw, ih);
   cr = cairo_create (surface);
-  gdk_cairo_set_source_pixbuf (cr, scaled_pixbuf, 0, 0);
+  cairo_scale (cr, 0.75, 0.75);
+  cairo_set_source_surface (cr, gtk_win_surface, 0, 0);
   cairo_paint (cr);
+  GST_INFO ("made surface for shadow image");
+  cairo_surface_destroy (gtk_win_surface);
 
+  filename = make_filename (widget, name);
   add_shadow_and_save (surface, filename, iw, ih);
+  GST_INFO ("made screenshot (%d,%d) for %s", iw, ih, filename);
 
   // cleanup
   cairo_destroy (cr);
   cairo_surface_destroy (surface);
-  g_object_unref (pixbuf);
-  g_object_unref (scaled_pixbuf);
   g_free (filename);
 }
 
@@ -546,7 +543,6 @@ void
 check_make_widget_screenshot_with_highlight (GtkWidget * widget,
     const gchar * name, BtCheckWidgetScreenshotRegions * regions)
 {
-  GdkPixbuf *pixbuf, *scaled_pixbuf;
   GtkWidget *child, *parent;
   GtkAllocation a;
   gint iw, ih;
@@ -567,12 +563,9 @@ check_make_widget_screenshot_with_highlight (GtkWidget * widget,
 
   g_return_if_fail (GTK_IS_WIDGET (widget));
 
-  filename = make_filename (widget, name);
-
-  pixbuf = make_screenshot (widget);
-  iw = gdk_pixbuf_get_width (pixbuf) * f;
-  ih = gdk_pixbuf_get_height (pixbuf) * f;
-  scaled_pixbuf = gdk_pixbuf_scale_simple (pixbuf, iw, ih, GDK_INTERP_HYPER);
+  cairo_surface_t *gtk_win_surface = make_screenshot (widget, &iw, &ih);
+  iw *= f;
+  ih *= f;
 
   // check borders
   r = regions;
@@ -599,8 +592,12 @@ check_make_widget_screenshot_with_highlight (GtkWidget * widget,
       cairo_image_surface_create (CAIRO_FORMAT_ARGB32, iw + bl + br,
       ih + bt + bb);
   cr = cairo_create (surface);
-  gdk_cairo_set_source_pixbuf (cr, scaled_pixbuf, bl, bt);
+  //cairo_save (cr);
+  cairo_scale (cr, f, f);
+  cairo_set_source_surface (cr, gtk_win_surface, bl, bt);
   cairo_paint (cr);
+  cairo_surface_destroy (gtk_win_surface);
+  //cairo_restore (cr);
 
   // locate widgets and highlight the areas
   r = regions;
@@ -635,10 +632,10 @@ check_make_widget_screenshot_with_highlight (GtkWidget * widget,
        */
       // TODO(ensonic): if we don't snapshot a top-level, we need to subtract the offset
       gtk_widget_get_allocation (child, &a);
-      wx = a.x * f;
-      wy = a.y * f;
-      ww = a.width * f;
-      wh = a.height * f;
+      wx = a.x;
+      wy = a.y;
+      ww = a.width;
+      wh = a.height;
       GST_INFO ("found widget at: %d,%d with %dx%d pixel size", a.x, a.y,
           a.width, a.height);
 
@@ -699,13 +696,13 @@ check_make_widget_screenshot_with_highlight (GtkWidget * widget,
     r++;
     num++;
   }
+
+  filename = make_filename (widget, name);
   add_shadow_and_save (surface, filename, iw + bl + br, ih + bt + bb);
 
   // cleanup
   cairo_destroy (cr);
   cairo_surface_destroy (surface);
-  g_object_unref (pixbuf);
-  g_object_unref (scaled_pixbuf);
   g_free (filename);
 }
 
@@ -723,15 +720,21 @@ check_send_key (GtkWidget * widget, guint state, guint keyval,
     guint16 hardware_keycode)
 {
   GdkEventKey *e;
-  GdkWindow *w;
-
-  w = gtk_widget_get_window (widget);
+  GdkWindow *w = gtk_widget_get_window (widget);
+#if GTK_CHECK_VERSION(3,20,0)
+  GdkDevice *dev =
+      gdk_seat_get_keyboard (gdk_display_get_default_seat
+      (gdk_window_get_display (w)));
+#endif
 
   e = (GdkEventKey *) gdk_event_new (GDK_KEY_PRESS);
   e->window = g_object_ref (w);
   e->keyval = keyval;
   e->hardware_keycode = hardware_keycode;
   e->state |= state;
+#if GTK_CHECK_VERSION(3,20,0)
+  gdk_event_set_device ((GdkEvent *) e, dev);
+#endif
   gtk_main_do_event ((GdkEvent *) e);
   flush_main_loop ();
   gdk_event_free ((GdkEvent *) e);
@@ -741,6 +744,9 @@ check_send_key (GtkWidget * widget, guint state, guint keyval,
   e->keyval = keyval;
   e->hardware_keycode = hardware_keycode;
   e->state |= GDK_RELEASE_MASK;
+#if GTK_CHECK_VERSION(3,20,0)
+  gdk_event_set_device ((GdkEvent *) e, dev);
+#endif
   gtk_main_do_event ((GdkEvent *) e);
   flush_main_loop ();
   gdk_event_free ((GdkEvent *) e);
@@ -760,9 +766,12 @@ void
 check_send_click (GtkWidget * widget, guint button, gdouble x, gdouble y)
 {
   GdkEventButton *e;
-  GdkWindow *w;
-
-  w = gtk_widget_get_window (widget);
+  GdkWindow *w = gtk_widget_get_window (widget);
+#if GTK_CHECK_VERSION(3,20,0)
+  GdkDevice *dev =
+      gdk_seat_get_pointer (gdk_display_get_default_seat (gdk_window_get_display
+          (w)));
+#endif
 
   e = (GdkEventButton *) gdk_event_new (GDK_BUTTON_PRESS);
   e->window = g_object_ref (w);
@@ -770,6 +779,9 @@ check_send_click (GtkWidget * widget, guint button, gdouble x, gdouble y)
   e->x = x;
   e->y = y;
   e->state = GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK;
+#if GTK_CHECK_VERSION(3,20,0)
+  gdk_event_set_device ((GdkEvent *) e, dev);
+#endif
   gtk_main_do_event ((GdkEvent *) e);
   flush_main_loop ();
   gdk_event_free ((GdkEvent *) e);
@@ -780,6 +792,9 @@ check_send_click (GtkWidget * widget, guint button, gdouble x, gdouble y)
   e->x = x;
   e->y = y;
   e->state = GDK_BUTTON1_MASK | GDK_BUTTON2_MASK | GDK_BUTTON3_MASK;
+#if GTK_CHECK_VERSION(3,20,0)
+  gdk_event_set_device ((GdkEvent *) e, dev);
+#endif
   gtk_main_do_event ((GdkEvent *) e);
   flush_main_loop ();
   gdk_event_free ((GdkEvent *) e);
@@ -794,9 +809,12 @@ void
 flush_main_loop (void)
 {
   GMainContext *ctx = g_main_context_default ();
+  gint num = 0;
 
-  GST_INFO ("flushing pending events ...");
-  while (g_main_context_pending (ctx))
+  GST_INFO ("flushing pending events (main-depth=%d) ...", g_main_depth ());
+  while (g_main_context_pending (ctx)) {
     g_main_context_iteration (ctx, FALSE);
-  GST_INFO ("... done");
+    num++;
+  }
+  GST_INFO ("... done  (main-depth=%d, iterations=%d)", g_main_depth (), num);
 }

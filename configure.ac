@@ -52,13 +52,8 @@ AC_SUBST(GST_MAJORMINOR)
 dnl release year and date
 DATE_STAMP=`head -n1 "${srcdir}/NEWS" | sed -e 's/^.*(\([[^\)]]*\)).*$/\1/'`
 if test "$DATE_STAMP" == "XX.XXX.XXXX"; then
-<<<<<<< Updated upstream
-  BT_RELEASE_YEAR=`date +%Y`
-  BT_RELEASE_DATE=`date +%Y-%m-%d`
-=======
   BT_RELEASE_YEAR=`date -u -r "${srcdir}/NEWS" +%Y`
   BT_RELEASE_DATE=`date -u -r "${srcdir}/NEWS" +%Y-%m-%d`
->>>>>>> Stashed changes
 else
   IFS="." read -r d m y <<< "$DATE_STAMP"
   BT_RELEASE_YEAR="$y"

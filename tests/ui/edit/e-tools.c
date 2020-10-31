@@ -1,5 +1,5 @@
 /* Buzztrax
- * Copyright (C) 2012 Buzztrax team <buzztrax-devel@buzztrax.org>
+ * Copyright (C) 2019 Buzztrax team <buzztrax-devel@buzztrax.org>
  *
  * This library is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Library General Public
@@ -19,9 +19,6 @@
 
 //-- globals
 
-static BtEditApplication *app;
-static BtMainWindow *main_window;
-
 //-- fixtures
 
 static void
@@ -33,21 +30,11 @@ case_setup (void)
 static void
 test_setup (void)
 {
-  bt_edit_setup ();
-  app = bt_edit_application_new ();
-  g_object_get (app, "main-window", &main_window, NULL);
-
-  flush_main_loop ();
 }
 
 static void
 test_teardown (void)
 {
-  gtk_widget_destroy (GTK_WIDGET (main_window));
-  flush_main_loop ();
-
-  ck_g_object_final_unref (app);
-  bt_edit_teardown ();
 }
 
 static void
@@ -55,57 +42,77 @@ case_teardown (void)
 {
 }
 
+
+//-- helper
+
 //-- tests
 
 static void
-test_bt_object_list_model_create (BT_TEST_ARGS)
+test_bt_strjoin_list_with_empty_list (BT_TEST_ARGS)
 {
   BT_TEST_START;
   GST_INFO ("-- arrange --");
 
   GST_INFO ("-- act --");
-  BtObjectListModel *model = bt_object_list_model_new (1, GTK_TYPE_LABEL,
-      "label");
+  gchar *res = bt_strjoin_list (NULL);
 
   GST_INFO ("-- assert --");
-  fail_unless (model != NULL, NULL);
+  fail_unless (res == NULL, NULL);
 
   GST_INFO ("-- cleanup --");
-  g_object_unref (g_object_ref_sink (model));
   BT_TEST_END;
 }
 
 static void
-test_bt_object_list_model_add_entry (BT_TEST_ARGS)
+test_bt_strjoin_list_with_single_value_list (BT_TEST_ARGS)
 {
   BT_TEST_START;
   GST_INFO ("-- arrange --");
-  GtkWidget *l1 = gtk_label_new ("test");
-  BtObjectListModel *model = bt_object_list_model_new (1, GTK_TYPE_LABEL,
-      "label");
-  GtkTreeIter iter;
+  GList *list = g_list_append (NULL, "first");
 
   GST_INFO ("-- act --");
-  bt_object_list_model_append (model, (GObject *) l1);
-  gtk_tree_model_get_iter_first ((GtkTreeModel *) model, &iter);
-  GtkWidget *l2 = (GtkWidget *) bt_object_list_model_get_object (model, &iter);
+  gchar *res = bt_strjoin_list (list);
 
   GST_INFO ("-- assert --");
-  fail_unless (l1 == l2, NULL);
+  fail_unless (res != NULL, NULL);
+  fail_unless (strcmp ("first", res) == 0, NULL);
 
   GST_INFO ("-- cleanup --");
-  g_object_unref (l1);
-  g_object_unref (g_object_ref_sink (model));
+  g_free (res);
+  g_list_free (list);
   BT_TEST_END;
 }
 
-TCase *
-bt_object_list_model_example_case (void)
+static void
+test_bt_strjoin_list_with_two_value_list (BT_TEST_ARGS)
 {
-  TCase *tc = tcase_create ("BtObjectListModelExamples");
+  BT_TEST_START;
+  GST_INFO ("-- arrange --");
+  GList *list = g_list_append (NULL, "first");
+  list = g_list_append (list, "second");
 
-  tcase_add_test (tc, test_bt_object_list_model_create);
-  tcase_add_test (tc, test_bt_object_list_model_add_entry);
+  GST_INFO ("-- act --");
+  gchar *res = bt_strjoin_list (list);
+
+  GST_INFO ("-- assert --");
+  fail_unless (res != NULL, NULL);
+  fail_unless (strcmp ("first\nsecond", res) == 0, NULL);
+
+  GST_INFO ("-- cleanup --");
+  g_free (res);
+  g_list_free (list);
+  BT_TEST_END;
+}
+
+
+TCase *
+bt_tools_example_case (void)
+{
+  TCase *tc = tcase_create ("BtToolsExamples");
+
+  tcase_add_test (tc, test_bt_strjoin_list_with_empty_list);
+  tcase_add_test (tc, test_bt_strjoin_list_with_single_value_list);
+  tcase_add_test (tc, test_bt_strjoin_list_with_two_value_list);
   tcase_add_checked_fixture (tc, test_setup, test_teardown);
   tcase_add_unchecked_fixture (tc, case_setup, case_teardown);
   return tc;
