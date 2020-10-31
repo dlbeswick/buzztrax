@@ -178,7 +178,9 @@ static void bt_main_page_machines_change_logger_interface_init (gpointer const
     g_iface, gconstpointer const iface_data);
 
 G_DEFINE_TYPE_WITH_CODE (BtMainPageMachines, bt_main_page_machines,
-    GTK_TYPE_BOX, G_IMPLEMENT_INTERFACE (BT_TYPE_CHANGE_LOGGER,
+    GTK_TYPE_BOX,
+    G_ADD_PRIVATE(BtMainPageMachines)
+    G_IMPLEMENT_INTERFACE (BT_TYPE_CHANGE_LOGGER,
         bt_main_page_machines_change_logger_interface_init));
 
 enum
@@ -1756,12 +1758,6 @@ bt_main_page_machines_init_ui (const BtMainPageMachines * self,
   self->priv->stage =
 	CLUTTER_STAGE(gtk_clutter_embed_get_stage (GTK_CLUTTER_EMBED (self->
 											  priv->canvas_widget)));
-  clutter_stage_set_use_alpha (self->priv->stage, TRUE);
-  style = gtk_widget_get_style_context (self->priv->canvas_widget);
-  on_canvas_style_updated (style, (gpointer) self);
-  g_signal_connect_after (style, "changed",
-      G_CALLBACK (on_canvas_style_updated), (gpointer) self);
-
   self->priv->canvas = clutter_actor_new ();
   clutter_actor_set_reactive (self->priv->canvas, TRUE);
   clutter_actor_set_size (self->priv->canvas, MACHINE_VIEW_W, MACHINE_VIEW_H);
@@ -1773,6 +1769,12 @@ bt_main_page_machines_init_ui (const BtMainPageMachines * self,
   clutter_actor_set_content (self->priv->canvas, self->priv->grid_canvas);
   clutter_actor_set_content_scaling_filters (self->priv->canvas,
       CLUTTER_SCALING_FILTER_TRILINEAR, CLUTTER_SCALING_FILTER_LINEAR);
+
+  clutter_stage_set_use_alpha (self->priv->stage, TRUE);
+  style = gtk_widget_get_style_context (self->priv->canvas_widget);
+  on_canvas_style_updated (style, (gpointer) self);
+  g_signal_connect_after (style, "changed",
+      G_CALLBACK (on_canvas_style_updated), (gpointer) self);
 
   g_signal_connect_object (self->priv->grid_canvas, "draw",
       G_CALLBACK (on_grid_draw), (gpointer) self, 0);
@@ -2584,9 +2586,7 @@ bt_main_page_machines_finalize (GObject * object)
 static void
 bt_main_page_machines_init (BtMainPageMachines * self)
 {
-  self->priv =
-      G_TYPE_INSTANCE_GET_PRIVATE (self, BT_TYPE_MAIN_PAGE_MACHINES,
-      BtMainPageMachinesPrivate);
+  self->priv = bt_main_page_machines_get_instance_private(self);
   GST_DEBUG ("!!!! self=%p", self);
   self->priv->app = bt_edit_application_new ();
   self->priv->zoom = 1.0;
@@ -2612,7 +2612,6 @@ bt_main_page_machines_class_init (BtMainPageMachinesClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GtkWidgetClass *gtkwidget_class = GTK_WIDGET_CLASS (klass);
-  g_type_class_add_private (klass, sizeof (BtMainPageMachinesPrivate));
   gobject_class->get_property = bt_main_page_machines_get_property;
   gobject_class->dispose = bt_main_page_machines_dispose;
   gobject_class->finalize = bt_main_page_machines_finalize;

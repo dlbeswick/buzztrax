@@ -132,25 +132,25 @@ G_DEFINE_TYPE (GstBtFluidSynth, gstbt_fluid_synth, GSTBT_TYPE_AUDIO_SYNTH);
 //-- fluid_synth log handler
 
 static void
-gstbt_fluid_synth_error_log_function (int level, char *message, void *data)
+gstbt_fluid_synth_error_log_function (int level, const char *message, void *data)
 {
   GST_ERROR ("%s", message);
 }
 
 static void
-gstbt_fluid_synth_warning_log_function (int level, char *message, void *data)
+gstbt_fluid_synth_warning_log_function (int level, const char *message, void *data)
 {
   GST_WARNING ("%s", message);
 }
 
 static void
-gstbt_fluid_synth_info_log_function (int level, char *message, void *data)
+gstbt_fluid_synth_info_log_function (int level, const char *message, void *data)
 {
   GST_INFO ("%s", message);
 }
 
 static void
-gstbt_fluid_synth_debug_log_function (int level, char *message, void *data)
+gstbt_fluid_synth_debug_log_function (int level, const char *message, void *data)
 {
   GST_DEBUG ("%s", message);
 }
@@ -212,7 +212,7 @@ typedef struct
 
 /* for counting the number of FluidSynth settings properties */
 static void
-settings_foreach_count (void *data, char *name, int type)
+settings_foreach_count (void *data, const char *name, int type)
 {
   int *count = (int *) data;
   *count = *count + 1;
@@ -220,7 +220,7 @@ settings_foreach_count (void *data, char *name, int type)
 
 /* add each FluidSynth setting as a GObject property */
 static void
-settings_foreach_func (void *data, char *name, int type)
+settings_foreach_func (void *data, const char *name, int type)
 {
   ForeachBag *bag = (ForeachBag *) data;
   GParamSpec *spec;
@@ -231,18 +231,18 @@ settings_foreach_func (void *data, char *name, int type)
   switch (type) {
     case FLUID_NUM_TYPE:
       fluid_settings_getnum_range (bag->settings, name, &dmin, &dmax);
-      ddef = fluid_settings_getnum_default (bag->settings, name);
+      fluid_settings_getnum_default (bag->settings, name, &ddef);
       spec = g_param_spec_double (name, name, name, dmin, dmax, ddef,
           G_PARAM_READWRITE);
       break;
     case FLUID_INT_TYPE:
       fluid_settings_getint_range (bag->settings, name, &imin, &imax);
-      idef = fluid_settings_getint_default (bag->settings, name);
+      fluid_settings_getint_default (bag->settings, name, &idef);
       spec = g_param_spec_int (name, name, name, imin, imax, idef,
           G_PARAM_READWRITE);
       break;
     case FLUID_STR_TYPE:
-      defstr = fluid_settings_getstr_default (bag->settings, name);
+      fluid_settings_getstr_default (bag->settings, name, &defstr);
       spec = g_param_spec_string (name, name, name, defstr, G_PARAM_READWRITE);
       break;
     case FLUID_SET_TYPE:
@@ -724,7 +724,7 @@ gstbt_fluid_synth_init (GstBtFluidSynth * src)
       new_fluid_midi_router (src->settings,
       fluid_synth_handle_midi_event, src->fluid);
   if (src->midi_router) {
-    src->cmd_handler = new_fluid_cmd_handler (src->fluid);
+    src->cmd_handler = new_fluid_cmd_handler (src->fluid, src->midi_router);
     if (src->cmd_handler) {
       src->midi = new_fluid_midi_driver (src->settings,
           fluid_midi_router_handle_midi_event, (void *) (src->midi_router));
@@ -886,7 +886,7 @@ gstbt_fluid_synth_class_init (GstBtFluidSynthClass * klass)
       g_param_spec_enum ("chorus-waveform", "Chorus waveform",
           "Chorus waveform type",
           CHORUS_WAVEFORM_TYPE,
-          FLUID_CHORUS_DEFAULT_TYPE,
+          FLUID_CHORUS_MOD_SINE,
           G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
 
   gst_element_class_set_static_metadata (element_class,
