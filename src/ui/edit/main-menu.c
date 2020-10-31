@@ -541,17 +541,17 @@ on_menu_stop_activate (GtkMenuItem * menuitem, gpointer user_data)
 static void
 on_menu_help_activate (GtkMenuItem * menuitem, gpointer user_data)
 {
-  //BtMainMenu *self=BT_MAIN_MENU(user_data);
+  BtMainMenu *self=BT_MAIN_MENU(user_data);
   GST_INFO ("menu help event occurred");
 
   // use "help:buzztrax-edit?topic" for context specific help
-  gtk_show_uri_simple (GTK_WIDGET (menuitem), "help:buzztrax-edit");
+  gtk_show_uri_simple (GTK_WIDGET(self->priv->main_window), "help:buzztrax-edit");
 }
 
 static void
 on_menu_join_irc (GtkMenuItem * menuitem, gpointer user_data)
 {
-  //BtMainMenu *self=BT_MAIN_MENU(user_data);
+  BtMainMenu *self=BT_MAIN_MENU(user_data);
   gchar *uri;
 
   GST_INFO ("menu join-irc event occurred");
@@ -560,17 +560,17 @@ on_menu_join_irc (GtkMenuItem * menuitem, gpointer user_data)
   uri =
       g_strdup_printf ("http://webchat.freenode.net?nick=%s&channels=#buzztrax",
       g_get_user_name ());
-  gtk_show_uri_simple (GTK_WIDGET (menuitem), uri);
+  gtk_show_uri_simple (GTK_WIDGET(self->priv->main_window), uri);
   g_free (uri);
 }
 
 static void
 on_menu_report_problem (GtkMenuItem * menuitem, gpointer user_data)
 {
-  //BtMainMenu *self=BT_MAIN_MENU(user_data);
+  BtMainMenu *self=BT_MAIN_MENU(user_data);
   GST_INFO ("menu submit_bug event occurred");
 
-  gtk_show_uri_simple (GTK_WIDGET (menuitem), "http://buzztrax.org/bugs/?");
+  gtk_show_uri_simple (GTK_WIDGET(self->priv->main_window), "http://buzztrax.org/bugs/?");
 }
 
 static void
@@ -662,46 +662,45 @@ on_menu_debug_dump_pipeline_graph_and_show (GtkMenuItem * menuitem,
   BtMainMenu *self = BT_MAIN_MENU (user_data);
   const gchar *path;
 
-  if ((path = g_getenv ("GST_DEBUG_DUMP_DOT_DIR"))) {
-    GstBin *bin;
-    gchar *cmd;
-    GError *error = NULL;
+  path = g_getenv ("GST_DEBUG_DUMP_DOT_DIR");
+  if (!path)
+    path = g_get_tmp_dir ();
+  
+  GstBin *bin;
+  gchar *cmd;
+  GError *error = NULL;
 
-    bt_child_proxy_get (self->priv->app, "song::bin", &bin, NULL);
+  bt_child_proxy_get (self->priv->app, "song::bin", &bin, NULL);
 
-    GST_INFO_OBJECT (bin, "dump dot graph as %s with 0x%x details",
-        self->priv->debug_graph_format, self->priv->debug_graph_details);
+  GST_INFO_OBJECT (bin, "dump dot graph as %s with 0x%x details",
+                   self->priv->debug_graph_format, self->priv->debug_graph_details);
 
-    GST_DEBUG_BIN_TO_DOT_FILE (bin, self->priv->debug_graph_details,
-        PACKAGE_NAME);
+  GST_DEBUG_BIN_TO_DOT_FILE (bin, self->priv->debug_graph_details,
+                             PACKAGE_NAME);
 
-    // release the reference
-    gst_object_unref (bin);
+  // release the reference
+  gst_object_unref (bin);
 
-    // convert file
-    cmd =
-        g_strdup_printf ("dot -T%s -o%s" G_DIR_SEPARATOR_S "" PACKAGE_NAME
-        ".%s %s" G_DIR_SEPARATOR_S "" PACKAGE_NAME ".dot",
-        self->priv->debug_graph_format, path, self->priv->debug_graph_format,
-        path);
-    if (!g_spawn_command_line_sync (cmd, NULL, NULL, NULL, &error)) {
-      GST_WARNING ("Failed to convert dot-graph: %s\n", error->message);
-      g_error_free (error);
-    } else {
-      gchar *png_uri;
-
-      png_uri =
-          g_strdup_printf ("file://%s" G_DIR_SEPARATOR_S "" PACKAGE_NAME ".%s",
-          path, self->priv->debug_graph_format);
-      gtk_show_uri_simple (GTK_WIDGET (menuitem), png_uri);
-      g_free (png_uri);
-    }
-    g_free (cmd);
+  // convert file
+  cmd =
+    g_strdup_printf ("dot -T%s -o%s" G_DIR_SEPARATOR_S "" PACKAGE_NAME
+                     ".%s %s" G_DIR_SEPARATOR_S "" PACKAGE_NAME ".dot",
+                     self->priv->debug_graph_format, path, self->priv->debug_graph_format,
+                     path);
+  if (!g_spawn_command_line_sync (cmd, NULL, NULL, NULL, &error)) {
+    GST_WARNING ("Failed to convert dot-graph: %s\n", error->message);
+    g_error_free (error);
   } else {
-    // the envvar is only checked at gst_init()
-    GST_WARNING
-        ("You need to start the app with GST_DEBUG_DUMP_DOT_DIR env-var set.");
+    gchar *png_uri;
+
+    png_uri =
+      g_strdup_printf ("file://%s" G_DIR_SEPARATOR_S "" PACKAGE_NAME ".%s",
+                       path, self->priv->debug_graph_format);
+    printf("%s\n", png_uri);
+    gtk_show_uri_simple (GTK_WIDGET(self->priv->main_window), png_uri);
+    g_free (png_uri);
   }
+  g_free (cmd);
 }
 
 static void
