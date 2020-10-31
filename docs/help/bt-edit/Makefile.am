@@ -11,6 +11,14 @@ HELP_MEDIA = $(patsubst C/%,%,$(wildcard C/figures/*.png))
 # We have no translation for the manual
 HELP_LINUAGS =
 
+<<<<<<< Updated upstream
+=======
+C/version.entities: $(abs_top_builddir)/docs/version.entities
+	@cp $< $@
+
+CLEANFILES = C/version.entities
+
+>>>>>>> Stashed changes
 SUBDIRS = C
 
 EXTRA_DIST = C/aspell.pws
