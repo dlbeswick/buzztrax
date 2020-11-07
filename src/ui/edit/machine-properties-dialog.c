@@ -1310,7 +1310,7 @@ on_checkbox_property_toggled (GtkToggleButton * togglebutton,
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_checkbox_property_notify, (gpointer) togglebutton);
-  //update_param_after_interaction(GTK_WIDGET(togglebutton),user_data);
+  update_param_after_interaction(GTK_WIDGET(togglebutton),user_data);
   bt_edit_application_set_song_unsaved (self->priv->app);
 }
 
@@ -1853,8 +1853,10 @@ make_checkbox_widget (const BtMachinePropertiesDialog * self, GObject * machine,
       G_CALLBACK (on_checkbox_property_toggled), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_trigger_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
+  // dbeswick: this gets called before toggled, cause wrong value to be sent to `bt_pattern_control_source_set_property'
+  // via `update_param_after_interaction'.
+/*  g_signal_connect (widget, "button-release-event",
+    G_CALLBACK (on_button_release_event), (gpointer) machine);*/
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
