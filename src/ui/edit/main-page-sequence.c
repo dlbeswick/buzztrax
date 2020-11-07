@@ -3127,7 +3127,7 @@ on_sequence_table_button_press_event (GtkWidget * widget,
         GST_INFO ("clicked outside data area - #1");
         switch (modifier) {
           case 0:
-            sequence_set_play_pos (self, -1);
+//            sequence_set_play_pos (self, -1);
             break;
           case GDK_CONTROL_MASK:
             sequence_set_loop_start (self, -1);
