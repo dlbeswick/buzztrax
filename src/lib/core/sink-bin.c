@@ -519,7 +519,7 @@ bt_sink_bin_get_player_elements (const BtSinkBin * const self)
   }
   element = bt_audio_session_get_sink_for (element_name, device_name);
   if (!element) {
-    GST_WARNING ("No session sink for '%s'", element_name);
+    GST_WARNING ("No session sink for element '%s', device '%s'", element_name, device_name);
     element = gst_element_factory_make (element_name, NULL);
     if (BT_IS_STRING (device_name)) {
       g_object_set (element, "device", device_name, NULL);
