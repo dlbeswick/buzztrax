@@ -1666,7 +1666,17 @@ bt_pattern_editor_set_pattern (BtPatternEditor * self, gpointer pattern_data,
   if (!self->groups || self->parameter >= self->groups[self->group].num_columns)
     self->parameter = 0;
 
-  gtk_widget_queue_resize (widget);
+  /** This call used to be to `queue_allocate', not `queue_draw'.
+   *
+   * The problem triggering this change is that the pattern table wasn't resized when
+   * setting a pattern, leading voices at the end of long patterns to be unviewable as the
+   * pattern didn't scroll horizontally. That's because `bt_pattern_editor_get_row_width'
+   * is called to figure out how wide the table should be, and that makes use of
+   * `self->groups[]->width' which is only updated during the draw function. So I guess
+   * just triggering an allocate doesn't update the required values. This might be
+   * wasteful and causing redraws when it's not necessary.
+   */
+  gtk_widget_queue_draw (widget);
 }
 
 /**
