@@ -390,8 +390,13 @@ bt_pattern_control_source_set_property (GObject * const object,
       GValue *new_value = g_value_get_pointer (value);
       GST_INFO ("%s -> %s", G_VALUE_TYPE_NAME (new_value),
           G_VALUE_TYPE_NAME (&self->priv->def_value));
-      GST_INFO ("%s -> %s", g_strdup_value_contents (new_value),
-          g_strdup_value_contents (&self->priv->def_value));
+#ifdef USE_DEBUG
+      gchar *from = g_strdup_value_contents (&self->priv->def_value);
+      gchar *to = g_strdup_value_contents (new_value);
+      GST_INFO ("Set %s to %s", from, to);
+      g_free(from);
+      g_free(to);
+#endif
       g_value_copy (new_value, &self->priv->def_value);
       GST_DEBUG ("set the def_value for the controlsource");
       break;
