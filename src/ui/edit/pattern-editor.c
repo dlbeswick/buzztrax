@@ -1113,6 +1113,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
         }
       }
       switch (event->keyval) {
+        case GDK_KEY_KP_Up:
         case GDK_KEY_Up:
           if (!modifier) {
             if (self->row > 0) {
@@ -1125,6 +1126,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
             return TRUE;
           }
           break;
+        case GDK_KEY_KP_Down:
         case GDK_KEY_Down:
           if (!modifier) {
             if (self->row < self->num_rows - 1) {
@@ -1137,6 +1139,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
             return TRUE;
           }
           break;
+        case GDK_KEY_KP_Page_Up:
         case GDK_KEY_Page_Up:
           if (!modifier) {
             if (self->row > 0) {
@@ -1156,6 +1159,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
             return TRUE;
           }
           break;
+        case GDK_KEY_KP_Page_Down:
         case GDK_KEY_Page_Down:
           if (!modifier) {
             if (self->row < self->num_rows - 1) {
@@ -1170,6 +1174,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
             return TRUE;
           }
           break;
+        case GDK_KEY_KP_Home:
         case GDK_KEY_Home:
           bt_pattern_editor_refresh_cursor (self);
           if (control) {
@@ -1194,6 +1199,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
           }
           bt_pattern_editor_refresh_cursor_or_scroll (self);
           return TRUE;
+        case GDK_KEY_KP_End:
         case GDK_KEY_End:
           bt_pattern_editor_refresh_cursor (self);
           if (control) {
@@ -1220,6 +1226,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
           }
           bt_pattern_editor_refresh_cursor_or_scroll (self);
           return TRUE;
+        case GDK_KEY_KP_Left:
         case GDK_KEY_Left:
           if (!modifier) {
             bt_pattern_editor_refresh_cursor (self);
@@ -1253,6 +1260,7 @@ bt_pattern_editor_key_press (GtkWidget * widget, GdkEventKey * event)
             return TRUE;
           }
           break;
+        case GDK_KEY_KP_Right:
         case GDK_KEY_Right:
           if (!modifier) {
             BtPatternEditorColumn *pc = cur_column (self);
@@ -1494,20 +1502,40 @@ bt_pattern_editor_set_property (GObject * object,
       break;
     case PROP_CURSOR_GROUP:{
       guint old = self->group;
-      self->group = g_value_get_uint (value);
+      /** This value may be restored from song machine settings and it may be out of date for
+       * various reasons, so clamp it to avoid out-of-bounds errors.
+       */
+      self->group = MIN(g_value_get_uint (value), self->num_groups-1);
       if (self->group != old) {
-        self->parameter = self->digit = 0;
-        bt_pattern_editor_refresh_cursor_or_scroll (self);
+        guint num_params;
+        if (self->group < self->num_groups)
+          num_params = self->groups[self->group].num_columns;
+        else
+          num_params = 0;
+        self->parameter = MIN(self->parameter, num_params-1);
+        self->digit = 0;
       }
+      // Always refresh, as a pattern change due to a machine change may require scrolling the cursor into view.
+      bt_pattern_editor_refresh_cursor_or_scroll (self);
       break;
     }
     case PROP_CURSOR_PARAM:{
       guint old = self->parameter;
-      self->parameter = g_value_get_uint (value);
+      /** This value may be restored from song machine settings and it may be out of date for
+       * various reasons, so clamp it to avoid out-of-bounds errors.
+       */
+      guint num_params;
+      if (self->group < self->num_groups)
+        num_params = self->groups[self->group].num_columns;
+      else
+        num_params = 0;
+      
+      self->parameter = MIN(g_value_get_uint (value), num_params-1);
       if (self->parameter != old) {
         self->digit = 0;
-        bt_pattern_editor_refresh_cursor_or_scroll (self);
       }
+      // Always refresh, as a pattern change due to a machine change may require scrolling the cursor into view.
+      bt_pattern_editor_refresh_cursor_or_scroll (self);
       break;
     }
     case PROP_CURSOR_DIGIT:
@@ -1515,7 +1543,10 @@ bt_pattern_editor_set_property (GObject * object,
       bt_pattern_editor_refresh_cursor_or_scroll (self);
       break;
     case PROP_CURSOR_ROW:
-      self->row = g_value_get_uint (value);
+      /** This value may be restored from song machine settings and it may be out of date for
+       * various reasons, so clamp it to avoid out-of-bounds errors.
+       */
+      self->row = MIN(g_value_get_uint (value), self->num_rows);
       bt_pattern_editor_refresh_cursor_or_scroll (self);
       break;
     default:
@@ -1610,7 +1641,6 @@ bt_pattern_editor_class_init (BtPatternEditorClass * klass)
           "cursor row prop.",
           "The current cursor row",
           0, G_MAXUINT, 0, G_PARAM_READWRITE | G_PARAM_STATIC_STRINGS));
-
 }
 
 static void

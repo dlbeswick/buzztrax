@@ -970,6 +970,13 @@ on_pattern_table_cursor_group_changed (const BtPatternEditor * editor,
   g_object_get ((gpointer) editor, "cursor-group", &self->priv->cursor_group,
       "cursor-param", &self->priv->cursor_param, NULL);
   pattern_view_update_cell_description (self, UPDATE_COLUMN_UPDATE);
+
+  if (self->priv->machine) {
+    GHashTable *properties;
+    g_object_get (self->priv->machine, "properties", &properties, NULL);
+    g_hash_table_insert (properties, g_strdup ("pattern-editor-group"),
+      g_strdup_printf ("%d", self->priv->cursor_group));
+  }
 }
 
 static void
@@ -981,6 +988,13 @@ on_pattern_table_cursor_param_changed (const BtPatternEditor * editor,
   g_object_get ((gpointer) editor, "cursor-param", &self->priv->cursor_param,
       NULL);
   pattern_view_update_cell_description (self, UPDATE_COLUMN_UPDATE);
+
+  if (self->priv->machine) {
+    GHashTable *properties;
+    g_object_get (self->priv->machine, "properties", &properties, NULL);
+    g_hash_table_insert (properties, g_strdup ("pattern-editor-param"),
+      g_strdup_printf ("%d", self->priv->cursor_param));
+  }
 }
 
 static void
@@ -991,6 +1005,13 @@ on_pattern_table_cursor_row_changed (const BtPatternEditor * editor,
 
   g_object_get ((gpointer) editor, "cursor-row", &self->priv->cursor_row, NULL);
   pattern_view_update_cell_description (self, UPDATE_COLUMN_UPDATE);
+
+  if (self->priv->machine) {
+    GHashTable *properties;
+    g_object_get (self->priv->machine, "properties", &properties, NULL);
+    g_hash_table_insert (properties, g_strdup ("pattern-editor-row"),
+      g_strdup_printf ("%ld", self->priv->cursor_row));
+  }
 }
 
 static gboolean
@@ -1159,6 +1180,7 @@ machine_menu_refresh (const BtMainPagePatterns * self, const BtSetup * setup)
   g_object_unref (store);       // drop with comboxbox
 }
 
+// pattern may be null
 static void
 pattern_menu_refresh (const BtMainPagePatterns * self, BtMachine * machine)
 {
@@ -1987,11 +2009,20 @@ change_current_pattern (const BtMainPagePatterns * self,
     self->priv->pattern_voices_changed =
         g_signal_connect (new_pattern, "notify::voices",
         G_CALLBACK (on_pattern_size_changed), (gpointer) self);
+    if (self->priv->machine) {
+      GHashTable *properties;
+      gchar *pattern_name;
+      g_object_get (new_pattern, "name", &pattern_name, NULL);
+      g_object_get (self->priv->machine, "properties", &properties, NULL);
+      g_hash_table_insert (properties, g_strdup ("pattern-editor-pattern"),
+        pattern_name);
+    }
   }
   // refresh pattern view
   pattern_table_refresh (self);
   pattern_view_update_cell_description (self, UPDATE_COLUMN_UPDATE);
   gtk_widget_grab_focus_savely (GTK_WIDGET (self->priv->pattern_table));
+
   return TRUE;
 }
 
@@ -2035,6 +2066,42 @@ change_current_machine (const BtMainPagePatterns * self,
       G_OBJECT_LOG_REF_COUNT (old_machine));
   g_object_try_unref (old_machine);
 
+  GHashTable *machine_props;
+  gchar *prop;
+  g_object_get (new_machine, "properties", &machine_props, NULL);
+  
+  // switch to last used base octave of that machine
+  if ((prop = (gchar *) g_hash_table_lookup (machine_props, "base-octave"))) {
+    self->priv->base_octave = atoi (prop);
+  } else {
+    self->priv->base_octave = DEFAULT_BASE_OCTAVE;
+  }
+  gtk_spin_button_set_value (self->priv->base_octave_menu,
+      self->priv->base_octave);
+
+  // restore last cursor position of pattern editor for machine
+  if ((prop = (gchar *) g_hash_table_lookup (machine_props, "pattern-editor-pattern"))) {
+    BtPattern *pattern;
+    if ((pattern = (BtPattern *) bt_machine_get_pattern_by_name (new_machine, prop))) {
+      if (change_current_pattern (self, pattern)) {
+        GtkTreeIter iter;
+        GtkTreeModel *store =
+            gtk_combo_box_get_model (self->priv->pattern_menu);
+        // get the row where row.pattern==pattern
+        // note: combo may sometimes not have a model (early startup)
+        if (store) {
+          if (pattern_menu_model_get_iter_by_pattern (store, &iter, pattern)) {
+            g_signal_handler_block (self->priv->pattern_menu, self->priv->pattern_menu_changed);
+            gtk_combo_box_set_active_iter (self->priv->pattern_menu, &iter);
+            g_signal_handler_unblock (self->priv->pattern_menu, self->priv->pattern_menu_changed);
+            GST_DEBUG ("selected new pattern");
+          }
+        }
+      }
+      g_object_unref (pattern);
+    }
+  }
+  
   // show new list of pattern in pattern menu
   pattern_menu_refresh (self, new_machine);
   GST_INFO ("1st done for  machine %" G_OBJECT_REF_COUNT_FMT,
@@ -2043,6 +2110,19 @@ change_current_machine (const BtMainPagePatterns * self,
   context_menu_refresh (self, new_machine);
   GST_INFO ("2nd done for  machine %" G_OBJECT_REF_COUNT_FMT,
       G_OBJECT_LOG_REF_COUNT (new_machine));
+
+  prop = (gchar *) g_hash_table_lookup (machine_props, "pattern-editor-row");
+  g_object_set (self->priv->pattern_table, "cursor-row", atoi(prop ? prop : "0"), NULL);
+
+  prop = (gchar *) g_hash_table_lookup (machine_props, "pattern-editor-group");
+  g_object_set (self->priv->pattern_table, "cursor-group", atoi(prop ? prop : "0"), NULL);
+
+  prop = (gchar *) g_hash_table_lookup (machine_props, "pattern-editor-param");
+  g_object_set (self->priv->pattern_table, "cursor-param", atoi(prop ? prop : "0"), NULL);
+  
+  // enable disable the wave combobox, depending on machine caps
+  gtk_widget_set_sensitive (GTK_WIDGET (self->priv->wavetable_menu),
+      bt_machine_handles_waves (new_machine));
 }
 
 static void
@@ -2424,8 +2504,6 @@ on_machine_menu_changed (GtkComboBox * menu, gpointer user_data)
 {
   BtMainPagePatterns *self = BT_MAIN_PAGE_PATTERNS (user_data);
   BtMachine *machine;
-  GHashTable *properties;
-  gchar *prop;
 
   machine = get_current_machine (self);
   GST_DEBUG ("new machine is %s: %" G_OBJECT_REF_COUNT_FMT,
@@ -2451,20 +2529,6 @@ on_machine_menu_changed (GtkComboBox * menu, gpointer user_data)
     }
     g_free (mid);
   }
-  // switch to last used base octave of that machine
-  g_object_get (self->priv->machine, "properties", &properties, NULL);
-  if ((prop = (gchar *) g_hash_table_lookup (properties, "base-octave"))) {
-    self->priv->base_octave = atoi (prop);
-  } else {
-    self->priv->base_octave = DEFAULT_BASE_OCTAVE;
-  }
-  gtk_spin_button_set_value (self->priv->base_octave_menu,
-      self->priv->base_octave);
-
-  // enable disable the wave combobox, depending on machine caps
-  gtk_widget_set_sensitive (GTK_WIDGET (self->priv->wavetable_menu),
-      bt_machine_handles_waves (machine));
-
   g_object_try_unref (machine);
 }
 
@@ -2557,26 +2621,7 @@ on_song_changed (const BtEditApplication * app, GParamSpec * arg,
       g_object_unref (machine);
     }
   }
-  if ((prop =
-          (gchar *) g_hash_table_lookup (self->priv->properties,
-              "selected-pattern"))) {
-    BtPattern *pattern;
-    if ((pattern =
-            (BtPattern *) bt_machine_get_pattern_by_name (self->priv->machine,
-                prop))) {
-      if (change_current_pattern (self, pattern)) {
-        GtkTreeIter iter;
-        GtkTreeModel *store =
-            gtk_combo_box_get_model (self->priv->pattern_menu);
-        // get the row where row.pattern==pattern
-        if (pattern_menu_model_get_iter_by_pattern (store, &iter, pattern)) {
-          gtk_combo_box_set_active_iter (self->priv->pattern_menu, &iter);
-          GST_DEBUG ("selected new pattern");
-        }
-      }
-      g_object_unref (pattern);
-    }
-  }
+
   // update page
   machine_menu_refresh (self, setup);
   //pattern_menu_refresh(self); // should be triggered by machine_menu_refresh()
@@ -3162,6 +3207,8 @@ bt_main_page_patterns_init_ui (const BtMainPagePatterns * self,
   g_signal_connect (self->priv->pattern_table, "notify::cursor-row",
       G_CALLBACK (on_pattern_table_cursor_row_changed), (gpointer) self);
   g_signal_connect (self->priv->pattern_table, "query-tooltip",
+      G_CALLBACK (on_pattern_table_query_tooltip), (gpointer) self);
+  g_signal_connect (self->priv->pattern_table, "cursor-move",
       G_CALLBACK (on_pattern_table_query_tooltip), (gpointer) self);
   gtk_box_pack_start (GTK_BOX (self), scrolled_window, TRUE, TRUE, 0);
 
