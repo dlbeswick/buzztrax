@@ -487,12 +487,15 @@ bt_machine_preferences_dialog_init_ui (const BtMachinePreferencesDialog * self)
         break;
       }
     }
+    gboolean enabled = (property->flags & G_PARAM_WRITABLE) != 0;
     gtk_widget_set_tooltip_text (widget1, tool_tip_text);
+    gtk_widget_set_sensitive (widget1, enabled);
     if (!widget2) {
       g_object_set (widget1, "hexpand", TRUE, "margin-left", LABEL_PADDING,
           NULL);
       gtk_grid_attach (GTK_GRID (table), widget1, 1, i, 2, 1);
     } else {
+      gtk_widget_set_sensitive (widget2, enabled);
       gtk_widget_set_tooltip_text (widget2, tool_tip_text);
       g_object_set (widget1, "hexpand", TRUE, "margin-left", LABEL_PADDING,
           "margin-right", LABEL_PADDING, NULL);
