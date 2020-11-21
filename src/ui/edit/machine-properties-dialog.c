@@ -1541,35 +1541,100 @@ on_preset_list_selection_changed (GtkTreeSelection * treeselection,
       (gtk_tree_selection_count_selected_rows (treeselection) != 0));
 }
 
+/* get_actuators_min_size: get the size of the smallest param "actuator"
+ *
+ * an "actuator" here means the ui control that is used to modify the value of
+ * a parameter, i.e. a slider bar.
+ *
+ * this function is used in logic that checks to make sure these ui elements
+ * aren't made too small for the user to do anything useful with them.
+ *
+ * if there are no elements in the parameter group box, then "default_width"
+ * is returned.
+ *
+ * the main window must be realized for this to return useful results.
+ */
+static gint
+get_actuators_min_width(BtMachinePropertiesDialog *self, gint default_width) {
+  /* this code makes assumptions about the layout of the UI elements. it would
+   * be better if it didn't. it might be a good idea to store references to
+   * the grid controls. */
+  
+  gint min = default_width;
+
+  /* assuming that param_group_box has some children that are GtkExpanders, and
+   * that the first child of most of these is a GtkGrid, and that the second
+   * column of that is the actuator element (i.e. slider) */
+  GList *children_gb =
+	  gtk_container_get_children (GTK_CONTAINER(self->priv->param_group_box));
+  
+  for (GList* l_gb = children_gb; l_gb != NULL; l_gb = l_gb->next) {
+	if (GTK_IS_EXPANDER (l_gb->data)) {
+	  GList *children_exp = gtk_container_get_children (GTK_CONTAINER(l_gb->data));
+	  
+	  for (GList* l_exp = children_exp; l_exp != NULL; l_exp = l_exp->next) {
+		if (GTK_IS_GRID(l_exp->data)) {
+		  GtkGrid *grid = (GtkGrid*)l_exp->data;
+		  GtkWidget *child_col2 = gtk_grid_get_child_at(grid,1,0);
+		  
+		  if (child_col2) {
+			GtkAllocation actuator_alloc;
+			gtk_widget_get_allocation (child_col2, &actuator_alloc);
+			min = MIN (actuator_alloc.width, min);
+		  }
+		  break;
+		}
+	  }
+	  
+	  g_list_free (children_exp);
+	}
+  }
+
+  g_list_free (children_gb);
+  
+  return min;
+}
+
 /*
  * on_box_realize:
  *
  * we adjust the scrollable-window size to contain all the machine
  * property widgets
+ *
+ * param_group_box is self->priv->param_group_box
  */
 static void
-on_box_realize (GtkWidget * widget, gpointer user_data)
+on_box_realize (GtkWidget * param_group_box, gpointer user_data)
 {
   BtMachinePropertiesDialog *self = BT_MACHINE_PROPERTIES_DIALOG (user_data);
   GtkScrolledWindow *parent =
       GTK_SCROLLED_WINDOW (gtk_widget_get_parent (gtk_widget_get_parent
-          (widget)));
-  GtkRequisition minimum, natural, requisition, natural_scrollwin;
+          (param_group_box)));
+  GtkRequisition minimum, natural, natural_scrollwin;
   GtkAllocation tb_alloc;
-  gint width, max_width, max_height, border, win_default_width;
+  gint width, max_width, max_height, border, win_default_width, ideal_width;
 
-  gtk_widget_get_preferred_size (widget, &minimum, &natural);
+  gtk_widget_get_preferred_size (param_group_box, &minimum, &natural);
   gtk_widget_get_allocation (GTK_WIDGET (self->priv->main_toolbar), &tb_alloc);
-  border = gtk_container_get_border_width (GTK_CONTAINER (widget));
+  border = gtk_container_get_border_width (GTK_CONTAINER (param_group_box));
 
-  requisition.width = MAX (minimum.width, natural.width) + border;
+  ideal_width = MAX (minimum.width, natural.width) + border;
   bt_gtk_workarea_size (&max_width, &max_height);
 
-  GST_DEBUG ("#### box width req %d (max %d)", requisition.width, max_width);
+  GST_DEBUG ("#### box width ideal %d (max %d)", ideal_width, max_width);
 
   // constrain the size by screen size minus some space for panels, deco and toolbar
-  width = MIN (requisition.width, max_width);
+  width = MIN (ideal_width, max_width);
 
+  // make sure that the "actuator" elements aren't too small to be usable
+  const gint actuator_desired_min_width = 200;
+  gint actuators_min_width =
+	  get_actuators_min_width(self, actuator_desired_min_width);
+
+  if (actuators_min_width < actuator_desired_min_width) {
+	width += actuator_desired_min_width - actuators_min_width;
+  }
+  
   gtk_scrolled_window_set_min_content_width (parent, width);
 
   // size the properties window to the height of all property widgets, but don't
@@ -2031,15 +2096,22 @@ make_param_control (const BtMachinePropertiesDialog * self, GObject * object,
       G_CALLBACK (on_button_release_event), (gpointer) object);
 
   gtk_widget_set_tooltip_text (widget1, tool_tip_text);
+  
+  /* If there's no value label widget present (i.e. string field displays its
+   * own value...) */
   if (!widget2) {
     g_object_set (widget1, "hexpand", TRUE, "margin-left", LABEL_PADDING, NULL);
     gtk_grid_attach (GTK_GRID (table), widget1, 1, row, 2, 1);
   } else {
+    /* Else `widget2' is either a GtkLabel or GtkEntry widget. `widget1' is the
+     * control widget. */
     gtk_widget_set_tooltip_text (widget2, tool_tip_text);
     g_object_set (widget1, "hexpand", TRUE, "margin-left", LABEL_PADDING,
         "margin-right", LABEL_PADDING, NULL);
     gtk_grid_attach (GTK_GRID (table), widget1, 1, row, 1, 1);
     if (GTK_IS_LABEL (widget2)) {
+      /* Create an EventBox to catch button events on the label and ferry them
+       * to the control widget */
       evb = gtk_event_box_new ();
       g_object_set (evb, "visible-window", FALSE, NULL);
       gtk_container_add (GTK_CONTAINER (evb), widget2);
@@ -2806,6 +2878,9 @@ bt_machine_properties_dialog_init_ui (const BtMachinePropertiesDialog * self)
       self->priv->param_group_box);
 #endif
   gtk_box_pack_start (GTK_BOX (param_box), scrolled_window, TRUE, TRUE, 0);
+
+  /* The "realize" event is where the properties window will be sized
+   * appropriately, once all property widget sizes have been calculated. */
   g_signal_connect (self->priv->param_group_box, "realize",
       G_CALLBACK (on_box_realize), (gpointer) self);
 
