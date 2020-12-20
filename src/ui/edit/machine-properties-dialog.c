@@ -2680,8 +2680,8 @@ bt_machine_properties_dialog_init_preset_box (const BtMachinePropertiesDialog *
   gtk_scrolled_window_set_shadow_type (GTK_SCROLLED_WINDOW (scrolled_window),
       GTK_SHADOW_IN);
   self->priv->preset_list = gtk_tree_view_new ();
-  g_object_set (self->priv->preset_list, "enable-search", FALSE, "rules-hint",
-      TRUE, "fixed-height-mode", TRUE, NULL);
+  g_object_set (self->priv->preset_list, "enable-search", FALSE,
+      "rules-hint", TRUE, NULL);
   tree_sel =
       gtk_tree_view_get_selection (GTK_TREE_VIEW (self->priv->preset_list));
   gtk_tree_selection_set_mode (tree_sel, GTK_SELECTION_SINGLE);
