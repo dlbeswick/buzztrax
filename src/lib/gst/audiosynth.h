@@ -43,6 +43,10 @@ struct _GstBtAudioSynth
   GstBaseSrc parent;
 
   /* < private > */
+  GMutex mutex_context_vars;    /* protects readers of vars that
+                                   are set when "set_context"
+                                   is called */
+  
   /* parameters */
   gdouble samples_per_buffer;
 

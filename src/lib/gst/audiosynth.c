@@ -114,6 +114,8 @@ gstbt_audio_synth_set_context (GstElement * element, GstContext * context)
   GstBtAudioSynth *self = GSTBT_AUDIO_SYNTH (element);
   guint bpm, tpb, stpb;
 
+  g_mutex_lock (&self->mutex_context_vars);
+  
   if (gstbt_audio_tempo_context_get_tempo (context, &bpm, &tpb, &stpb)) {
     if (self->beats_per_minute != bpm ||
         self->ticks_per_beat != tpb || self->subticks_per_beat != stpb) {
@@ -127,6 +129,9 @@ gstbt_audio_synth_set_context (GstElement * element, GstContext * context)
       gstbt_audio_synth_calculate_buffer_frames (self);
     }
   }
+  
+  g_mutex_unlock (&self->mutex_context_vars);
+  
 #if GST_CHECK_VERSION (1,8,0)
   GST_ELEMENT_CLASS (gstbt_audio_synth_parent_class)->set_context (element,
       context);
@@ -305,11 +310,14 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
   gdouble samples_done;
   guint samples_per_buffer;
   gboolean partial_buffer = FALSE;
+  GstFlowReturn result = GST_FLOW_OK;
   
+  g_mutex_lock (&src->mutex_context_vars);
 
   if (G_UNLIKELY (src->eos_reached)) {
     GST_WARNING_OBJECT (src, "EOS reached");
-    return GST_FLOW_EOS;
+    result = GST_FLOW_EOS;
+    goto done;
   }
   // the amount of samples to produce (handle rounding errors by collecting left over fractions)
   samples_done =
@@ -357,7 +365,8 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
     if (G_UNLIKELY (!src->generate_samples_per_buffer)) {
       GST_WARNING_OBJECT (src, "0 samples left -> EOS reached");
       src->eos_reached = TRUE;
-      return GST_FLOW_EOS;
+      result = GST_FLOW_EOS;
+      goto done;
     }
     n_samples = src->n_samples_stop;
     src->eos_reached = TRUE;
@@ -380,7 +389,8 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
   res = GST_BASE_SRC_GET_CLASS (basesrc)->alloc (basesrc, src->n_samples,
       gstbt_audio_synth_calculate_buffer_size (src), &buf);
   if (G_UNLIKELY (res != GST_FLOW_OK)) {
-    return res;
+    result = res;
+    goto done;
   }
 
   if (!src->reverse) {
@@ -424,22 +434,24 @@ gstbt_audio_synth_create (GstBaseSrc * basesrc, guint64 offset,
   src->running_time = next_running_time;
   src->n_samples = n_samples;
 
-  if (klass->process) {
-    if (gst_buffer_map (buf, &info, GST_MAP_WRITE)) {
-      if (!klass->process (src, buf, &info)) {
-        memset (info.data, 0, info.size);
-        GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_GAP);
-      }
-      gst_buffer_unmap (buf, &info);
-    } else {
-      GST_WARNING_OBJECT (src, "unable to map buffer for write");
+  if (gst_buffer_map (buf, &info, GST_MAP_WRITE)) {
+    if (!klass->process) {
+      GST_ERROR_OBJECT (src, "'process' function not defined");
     }
-    *buffer = buf;
-  } else {
-    GST_ERROR_OBJECT (src, "'process' function not defined");
-  }
 
-  return GST_FLOW_OK;
+    if (!klass->process || !klass->process (src, buf, &info)) {
+      memset (info.data, 0, info.size);
+      GST_BUFFER_FLAG_SET (buf, GST_BUFFER_FLAG_GAP);
+    }
+    gst_buffer_unmap (buf, &info);
+  } else {
+    GST_WARNING_OBJECT (src, "unable to map buffer for write");
+  }
+  *buffer = buf;
+
+done:
+  g_mutex_unlock (&src->mutex_context_vars);
+  return result;
 }
 
 static gboolean
@@ -453,6 +465,15 @@ gstbt_audio_synth_stop (GstBaseSrc * basesrc)
 }
 
 //-- gobject type methods
+static void
+gstbt_audio_synth_dispose (GObject * object)
+{
+  GstBtAudioSynth *self = GSTBT_AUDIO_SYNTH (object);
+
+  g_mutex_clear (&self->mutex_context_vars);
+
+  G_OBJECT_CLASS (gstbt_audio_synth_parent_class)->dispose (object);
+}
 
 static void
 gstbt_audio_synth_init (GstBtAudioSynth * self)
@@ -467,17 +488,22 @@ gstbt_audio_synth_init (GstBtAudioSynth * self)
   /* we operate in time */
   gst_base_src_set_format (GST_BASE_SRC (self), GST_FORMAT_TIME);
   gst_base_src_set_live (GST_BASE_SRC (self), FALSE);
+
+  g_mutex_init (&self->mutex_context_vars);
 }
 
 static void
 gstbt_audio_synth_class_init (GstBtAudioSynthClass * klass)
 {
+  GObjectClass *object_class = (GObjectClass *) klass;
   GstElementClass *element_class = (GstElementClass *) klass;
   GstBaseSrcClass *gstbasesrc_class = (GstBaseSrcClass *) klass;
 
   GST_DEBUG_CATEGORY_INIT (GST_CAT_DEFAULT, "audiosynth",
       GST_DEBUG_FG_BLUE | GST_DEBUG_BG_BLACK, "Base Audio synthesizer");
 
+  object_class->dispose = gstbt_audio_synth_dispose;
+  
   element_class->set_context =
       GST_DEBUG_FUNCPTR (gstbt_audio_synth_set_context);
 
