@@ -172,13 +172,6 @@ gtk_show_uri_simple (GtkWidget * widget, const gchar * uri)
   g_return_if_fail (uri);
 
 #if GTK_CHECK_VERSION (3, 22, 0)
-  /* Ultimately, GTK will call gdk_x11_window_get_xid on the window supplied to
-   * gtk_show_uri_on_window (on X11). If that window hasn't been realized then a crash
-   * will occur. This can happen when an keyboard accelerator is used to trigger a menu
-   * item and the handler passes the menuitem widget to this function, for example.
-   */
-  g_return_if_fail(gtk_widget_get_realized (widget));
-  
   GtkWidget *toplevel = gtk_widget_get_toplevel (widget);
   if (!GTK_IS_WINDOW (toplevel)) {
     GST_WARNING ("Failed lookup widgets window\n");
