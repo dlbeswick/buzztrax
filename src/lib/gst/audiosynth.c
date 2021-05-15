@@ -169,7 +169,7 @@ gstbt_audio_synth_fixate (GstBaseSrc * basesrc, GstCaps * caps)
   caps = gst_caps_make_writable (caps);
   for (i = 0; i < n; i++) {
     gst_structure_fixate_field_nearest_int (gst_caps_get_structure (caps, i),
-                                            "rate", target_rate);
+        "rate", target_rate);
   }
   GST_INFO_OBJECT (self, "fixated to %" GST_PTR_FORMAT, caps);
 
