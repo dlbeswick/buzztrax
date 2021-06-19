@@ -125,6 +125,7 @@ struct _BtMachineCanvasItemPrivate
 
   /* the graphical components */
   ClutterContent *image;
+  ClutterContent *image_custom_gfx;
   ClutterActor *label;
   ClutterActor *output_meter, *input_meter;
   GstElement *output_level;
@@ -148,6 +149,10 @@ struct _BtMachineCanvasItemPrivate
   /* playback state */
   gboolean is_playing;
 
+  /* custom graphics */
+  guint custom_gfx_timer;
+  GMutex custom_gfx_lock;
+  
   /* lock for multithreaded access */
   GMutex lock;
 };
@@ -193,6 +198,52 @@ update_machine_graphics (BtMachineCanvasItem * self)
       gdk_pixbuf_get_height (pixbuf));
 
   g_object_unref (pixbuf);
+}
+
+static gboolean
+custom_gfx_request_after_invalidation (BtMachineCanvasItem * self) {
+  GstElement *element;
+  g_object_get (self->priv->machine, "machine", &element, NULL);
+  g_signal_emit_by_name (element, "bt-gfx-request", 0);
+  g_clear_object (&element);
+          
+  g_mutex_lock (&self->priv->custom_gfx_lock);
+  self->priv->custom_gfx_timer = 0;
+  g_mutex_unlock (&self->priv->custom_gfx_lock);
+  return FALSE;
+}
+
+static void
+on_custom_gfx_invalidated (BtMachine * machine, BtMachineCanvasItem * self) {
+  // Updating the custom gfx this way is important for two reasons:
+  //
+  // 1. It makes sure that the image update happens on the main thread.
+  //    Clutter doesn't seem to like requests coming from another thread.
+  //    This will likely be called from the Gstreaming processing thread.
+  // 2. It aggregates many invalidating requests (i.e. from multiple machine
+  //    property updates) into a single "update gfx" call.
+  g_mutex_lock(&self->priv->custom_gfx_lock);
+  if (!self->priv->custom_gfx_timer)
+    self->priv->custom_gfx_timer =
+        g_timeout_add(5, G_SOURCE_FUNC(custom_gfx_request_after_invalidation),
+            self);
+  g_mutex_unlock(&self->priv->custom_gfx_lock);
+}
+
+static void
+on_custom_gfx_present (BtMachine * machine, guint width, guint height,
+    GBytes * data, BtMachineCanvasItem * self) {
+
+  g_return_if_fail(self->priv->image_custom_gfx);
+
+  if (data) {
+    clutter_image_set_bytes (CLUTTER_IMAGE (self->priv->image_custom_gfx),
+        data, COGL_PIXEL_FORMAT_RGBA_8888, width, height, width*4, NULL);
+  } else {
+    int32_t zero = 0;
+    clutter_image_set_data (CLUTTER_IMAGE (self->priv->image_custom_gfx),
+    (const guint8*)&zero, COGL_PIXEL_FORMAT_RGBA_8888, 1, 1, 4, NULL);
+  }
 }
 
 static void
@@ -1046,6 +1097,14 @@ bt_machine_canvas_item_constructed (GObject * object)
       (MACHINE_H / -2.0), 0.0);
   clutter_actor_set_content ((ClutterActor *) self, self->priv->image);
 
+  // a child actor allowing display of additional gfx by the machine element
+  ClutterActor *actor_custom_gfx = clutter_actor_new();
+  clutter_actor_set_content_scaling_filters (actor_custom_gfx,
+      CLUTTER_SCALING_FILTER_TRILINEAR, CLUTTER_SCALING_FILTER_LINEAR);
+  clutter_actor_set_size (actor_custom_gfx, MACHINE_W, MACHINE_H);
+  clutter_actor_set_content (actor_custom_gfx, self->priv->image_custom_gfx);
+  clutter_actor_add_child ((ClutterActor *) self, actor_custom_gfx);
+
   // the name label
   // TODO(ensonic): use MACHINE_LABEL_HEIGHT (7)
   // TODO(ensonic): when zooming, the font gets blurry :/
@@ -1173,6 +1232,16 @@ bt_machine_canvas_item_set_property (GObject * object, guint property_id,
       if (new_machine != self->priv->machine) {
         GstElement *element;
 
+        if (self->priv->machine) {
+          GstElement *element_old;
+          g_object_get (self->priv->machine, "machine", &element_old, NULL);
+          g_signal_handlers_disconnect_by_func (
+              element_old, on_custom_gfx_present, (gpointer) self);
+          g_signal_handlers_disconnect_by_func (
+              element_old, on_custom_gfx_invalidated, (gpointer) self);
+          g_object_unref(element_old);
+        }
+        
         g_object_try_unref (self->priv->machine);
         self->priv->machine = g_object_ref (new_machine);
 
@@ -1182,6 +1251,18 @@ bt_machine_canvas_item_set_property (GObject * object, guint property_id,
             machine_canvas_item_quark, (gpointer) self);
         g_object_get (self->priv->machine, "properties",
             &self->priv->properties, "machine", &element, NULL);
+
+        // connect to custom gfx signal event, if available
+        if (g_signal_lookup("bt-gfx-present", G_OBJECT_TYPE (element))) {
+          g_signal_connect (element, "bt-gfx-present",
+              G_CALLBACK (on_custom_gfx_present), self);
+          g_signal_connect (element, "bt-gfx-invalidated",
+              G_CALLBACK (on_custom_gfx_invalidated), self);
+
+          // ask the element to send an image based on its current state, so the
+          // image will have data from the start
+          g_signal_emit_by_name (element, "bt-gfx-request", 0);
+        }
 
         self->priv->help_uri =
             gst_element_factory_get_metadata (gst_element_get_factory (element),
@@ -1246,7 +1327,18 @@ bt_machine_canvas_item_dispose (GObject * object)
   GST_DEBUG ("machine: %" G_OBJECT_REF_COUNT_FMT,
       G_OBJECT_LOG_REF_COUNT (self->priv->machine));
 
+  if (self->priv->machine) {
+    GstElement *element_old;
+    g_object_get (self->priv->machine, "machine", &element_old, NULL);
+    g_signal_handlers_disconnect_by_func (
+      element_old, on_custom_gfx_present, (gpointer) self);
+    g_signal_handlers_disconnect_by_func (
+      element_old, on_custom_gfx_invalidated, (gpointer) self);
+    g_object_unref(element_old);
+  }
+  
   g_object_unref (self->priv->image);
+  g_object_unref (self->priv->image_custom_gfx);
 
   GST_INFO ("release the machine %" G_OBJECT_REF_COUNT_FMT,
       G_OBJECT_LOG_REF_COUNT (self->priv->machine));
@@ -1289,6 +1381,7 @@ bt_machine_canvas_item_finalize (GObject * object)
 
   GST_DEBUG ("!!!! self=%p", self);
   g_mutex_clear (&self->priv->lock);
+  g_mutex_clear (&self->priv->custom_gfx_lock);
 
   G_OBJECT_CLASS (bt_machine_canvas_item_parent_class)->finalize (object);
   GST_DEBUG ("  done");
@@ -1513,6 +1606,10 @@ bt_machine_canvas_item_init (BtMachineCanvasItem * self)
   self->priv->zoom = 1.0;
 
   g_mutex_init (&self->priv->lock);
+  g_mutex_init (&self->priv->custom_gfx_lock);
+
+  self->priv->image_custom_gfx = clutter_image_new ();
+  on_custom_gfx_present (self->priv->machine, 0, 0, NULL, self);
 }
 
 static void
