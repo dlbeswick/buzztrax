@@ -141,6 +141,8 @@ static GQuark widget_child_quark = 0;
 static GQuark widget_param_group_quark = 0;     /* points to ParamGroup */
 static GQuark widget_param_num_quark = 0;       /* which parameter inside the group */
 
+static void update_param_after_interaction (GtkWidget * widget);
+
 //-- the class
 
 G_DEFINE_TYPE_WITH_CODE (BtMachinePropertiesDialog, bt_machine_properties_dialog,
@@ -195,7 +197,6 @@ get_param_group (const BtMachinePropertiesDialog * self, GObject * param_parent)
 static void
 on_parameter_reset (GtkMenuItem * menuitem, gpointer user_data)
 {
-  //BtMachinePropertiesDialog *self=BT_MACHINE_PROPERTIES_DIALOG(user_data);
   GtkWidget *menu;
   GObject *object;
   gchar *property_name;
@@ -215,6 +216,14 @@ on_parameter_reset (GtkMenuItem * menuitem, gpointer user_data)
     g_param_value_set_default (pspec, &gvalue);
     g_object_set_property (object, property_name, &gvalue);
     g_value_unset (&gvalue);
+
+    // The property control widget that was right-clicked on.
+	GtkWidget *actuator_widget = gtk_menu_get_attach_widget (menu);
+	if (actuator_widget) {
+	  update_param_after_interaction (actuator_widget);
+	} else {
+	  GST_ERROR("Couldn't set default value on property after reset");
+	}
   }
 
   g_object_unref (object);
@@ -595,14 +604,14 @@ on_uint64_range_property_format_value (GtkScale * scale, gdouble value,
 }
 
 static void
-update_param_after_interaction (GtkWidget * widget, gpointer user_data)
+update_param_after_interaction (GtkWidget * widget)
 {
   BtMachinePropertiesDialog *self =
       BT_MACHINE_PROPERTIES_DIALOG (g_object_get_qdata (G_OBJECT (widget),
           widget_parent_quark));
 
   bt_machine_update_default_param_value (self->priv->machine,
-      gtk_widget_get_name (GTK_WIDGET (widget)),
+      gtk_widget_get_name (widget),
       g_object_get_qdata (G_OBJECT (widget), widget_param_group_quark));
 }
 
@@ -683,7 +692,8 @@ on_button_press_event (GtkWidget * widget, GdkEventButton * event,
           "selected-parameter-group", pg, "selected-property-name",
           property_name, NULL);
 
-      gtk_menu_popup_at_pointer (GTK_MENU (m), NULL);
+      gtk_menu_popup_at_pointer (GTK_MENU (m), event);
+      gtk_menu_attach_to_widget (GTK_MENU (m), widget, NULL);
       res = TRUE;
     } else if (event->button == GDK_BUTTON_PRIMARY) {
       gst_object_set_control_binding_disabled (param_parent, property_name,
@@ -699,7 +709,7 @@ on_button_release_event (GtkWidget * widget, GdkEventButton * event,
     gpointer user_data)
 {
   if (event->button == GDK_BUTTON_PRIMARY && event->type == GDK_BUTTON_RELEASE) {
-    update_param_after_interaction (widget, user_data);
+    update_param_after_interaction (widget);
   }
   return FALSE;
 }
@@ -709,7 +719,7 @@ on_key_release_event (GtkWidget * widget, GdkEventKey * event,
     gpointer user_data)
 {
   if (event->type == GDK_KEY_RELEASE) {
-    update_param_after_interaction (widget, user_data);
+    update_param_after_interaction (widget);
   }
   return FALSE;
 }
@@ -853,6 +863,7 @@ on_double_range_property_changed (GtkRange * range, gpointer user_data)
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_double_range_property_notify, (gpointer) range);
   g_object_set (param_parent, name, value, NULL);
+  update_param_after_interaction (GTK_WIDGET (range));
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_double_range_property_notify, (gpointer) range);
@@ -918,6 +929,7 @@ on_float_range_property_changed (GtkRange * range, gpointer user_data)
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_float_range_property_notify, (gpointer) range);
   g_object_set (param_parent, name, value, NULL);
+  update_param_after_interaction (GTK_WIDGET (range));
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_float_range_property_notify, (gpointer) range);
@@ -987,6 +999,7 @@ on_int_range_property_changed (GtkRange * range, gpointer user_data)
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_int_range_property_notify, (gpointer) range);
   g_object_set (param_parent, name, (gint) value, NULL);
+  update_param_after_interaction (GTK_WIDGET (range));
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_int_range_property_notify, (gpointer) range);
@@ -1056,6 +1069,7 @@ on_uint_range_property_changed (GtkRange * range, gpointer user_data)
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_uint_range_property_notify, (gpointer) range);
   g_object_set (param_parent, name, (guint) value, NULL);
+  update_param_after_interaction (GTK_WIDGET (range));
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_uint_range_property_notify, (gpointer) range);
@@ -1180,6 +1194,7 @@ on_uint64_entry_property_changed (GtkEditable * editable, gpointer user_data)
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_uint64_range_property_notify, (gpointer) range);
   g_object_set (param_parent, name, clamped_value, NULL);
+  update_param_after_interaction (GTK_WIDGET (range));
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_uint64_range_property_notify, (gpointer) range);
@@ -1256,7 +1271,7 @@ on_combobox_property_changed (GtkComboBox * combobox, gpointer user_data)
         G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
         on_combobox_property_notify, (gpointer) combobox);
     //GST_WARNING("property value change received: %d",value);
-    update_param_after_interaction (GTK_WIDGET (combobox), user_data);
+    update_param_after_interaction (GTK_WIDGET (combobox));
     bt_edit_application_set_song_unsaved (self->priv->app);
   }
 }
@@ -1310,7 +1325,7 @@ on_checkbox_property_toggled (GtkToggleButton * togglebutton,
   g_signal_handlers_unblock_matched (param_parent,
       G_SIGNAL_MATCH_FUNC | G_SIGNAL_MATCH_DATA, 0, 0, NULL,
       on_checkbox_property_notify, (gpointer) togglebutton);
-  update_param_after_interaction(GTK_WIDGET(togglebutton),user_data);
+  update_param_after_interaction(GTK_WIDGET(togglebutton));
   bt_edit_application_set_song_unsaved (self->priv->app);
 }
 
@@ -1685,8 +1700,6 @@ make_int_range_widget (const BtMachinePropertiesDialog * self,
       G_CALLBACK (on_int_range_property_changed), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_range_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
@@ -1717,8 +1730,6 @@ make_uint_range_widget (const BtMachinePropertiesDialog * self,
       G_CALLBACK (on_uint_range_property_changed), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_range_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
@@ -1749,8 +1760,6 @@ make_uint64_range_widget (const BtMachinePropertiesDialog * self,
       G_CALLBACK (on_uint64_range_property_changed), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_range_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   g_signal_connect (entry, "changed",
@@ -1786,8 +1795,6 @@ make_float_range_widget (const BtMachinePropertiesDialog * self,
       G_CALLBACK (on_float_range_property_changed), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_range_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
@@ -1821,8 +1828,6 @@ make_double_range_widget (const BtMachinePropertiesDialog * self,
       G_CALLBACK (on_double_range_property_changed), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_range_button_press_event), (gpointer) machine);
-  g_signal_connect (widget, "button-release-event",
-      G_CALLBACK (on_button_release_event), (gpointer) machine);
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
@@ -1918,10 +1923,6 @@ make_checkbox_widget (const BtMachinePropertiesDialog * self, GObject * machine,
       G_CALLBACK (on_checkbox_property_toggled), (gpointer) machine);
   g_signal_connect (widget, "button-press-event",
       G_CALLBACK (on_trigger_button_press_event), (gpointer) machine);
-  // dbeswick: this gets called before toggled, cause wrong value to be sent to `bt_pattern_control_source_set_property'
-  // via `update_param_after_interaction'.
-/*  g_signal_connect (widget, "button-release-event",
-    G_CALLBACK (on_button_release_event), (gpointer) machine);*/
   g_signal_connect (widget, "key-release-event",
       G_CALLBACK (on_key_release_event), (gpointer) machine);
   return widget;
