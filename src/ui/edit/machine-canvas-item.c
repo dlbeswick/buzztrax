@@ -70,6 +70,7 @@
 #define BT_MACHINE_CANVAS_ITEM_C
 
 #include "bt-edit.h"
+#include "src/lib/gst/ui.h"
 
 #define LOW_VUMETER_VAL -60.0
 
@@ -199,11 +200,33 @@ update_machine_graphics (BtMachineCanvasItem * self)
   g_object_unref (pixbuf);
 }
 
+static void
+update_custom_graphics (BtMachineCanvasItem * self, guint width, guint height, guint32 * data) {
+  g_return_if_fail(self->priv->image_custom_gfx);
+
+  if (data) {
+    clutter_image_set_data (CLUTTER_IMAGE (self->priv->image_custom_gfx),
+        (guint8*)data, COGL_PIXEL_FORMAT_RGBA_8888, width, height, width*4, NULL);
+  } else {
+    int32_t zero = 0;
+    clutter_image_set_data (CLUTTER_IMAGE (self->priv->image_custom_gfx),
+        (guint8*)&zero, COGL_PIXEL_FORMAT_RGBA_8888, 1, 1, 4, NULL);
+  }
+}
+
 static gboolean
 custom_gfx_request_after_invalidation (BtMachineCanvasItem * self) {
   GstElement *element;
   g_object_get (self->priv->machine, "machine", &element, NULL);
-  g_signal_emit_by_name (element, "bt-gfx-request", 0);
+  
+  const BtUiCustomGfx* gfx = 0;
+  g_signal_emit_by_name (element, "bt-gfx-request", &gfx);
+  if (gfx) {
+    update_custom_graphics (self, gfx->width, gfx->height, gfx->data);
+  } else {
+    update_custom_graphics (self, 0, 0, NULL);
+  }
+  
   g_clear_object (&element);
           
   g_mutex_lock (&self->priv->custom_gfx_lock);
@@ -227,22 +250,6 @@ on_custom_gfx_invalidated (BtMachine * machine, BtMachineCanvasItem * self) {
         g_timeout_add(5, G_SOURCE_FUNC(custom_gfx_request_after_invalidation),
             self);
   g_mutex_unlock(&self->priv->custom_gfx_lock);
-}
-
-static void
-on_custom_gfx_present (BtMachine * machine, guint width, guint height,
-    GBytes * data, BtMachineCanvasItem * self) {
-
-  g_return_if_fail(self->priv->image_custom_gfx);
-
-  if (data) {
-    clutter_image_set_bytes (CLUTTER_IMAGE (self->priv->image_custom_gfx),
-        data, COGL_PIXEL_FORMAT_RGBA_8888, width, height, width*4, NULL);
-  } else {
-    int32_t zero = 0;
-    clutter_image_set_data (CLUTTER_IMAGE (self->priv->image_custom_gfx),
-    (const guint8*)&zero, COGL_PIXEL_FORMAT_RGBA_8888, 1, 1, 4, NULL);
-  }
 }
 
 static void
@@ -1265,8 +1272,6 @@ bt_machine_canvas_item_set_property (GObject * object, guint property_id,
           GstElement *element_old;
           g_object_get (self->priv->machine, "machine", &element_old, NULL);
           g_signal_handlers_disconnect_by_func (
-              element_old, on_custom_gfx_present, (gpointer) self);
-          g_signal_handlers_disconnect_by_func (
               element_old, on_custom_gfx_invalidated, (gpointer) self);
           g_object_unref(element_old);
         }
@@ -1282,15 +1287,13 @@ bt_machine_canvas_item_set_property (GObject * object, guint property_id,
             &self->priv->properties, "machine", &element, NULL);
 
         // connect to custom gfx signal event, if available
-        if (g_signal_lookup("bt-gfx-present", G_OBJECT_TYPE (element))) {
-          g_signal_connect (element, "bt-gfx-present",
-              G_CALLBACK (on_custom_gfx_present), self);
+        if (g_signal_lookup("bt-gfx-request", G_OBJECT_TYPE (element))) {
           g_signal_connect (element, "bt-gfx-invalidated",
               G_CALLBACK (on_custom_gfx_invalidated), self);
 
           // ask the element to send an image based on its current state, so the
           // image will have data from the start
-          g_signal_emit_by_name (element, "bt-gfx-request", 0);
+          g_signal_emit_by_name (element, "bt-gfx-invalidated");
         }
 
         self->priv->help_uri =
@@ -1359,8 +1362,6 @@ bt_machine_canvas_item_dispose (GObject * object)
   if (self->priv->machine) {
     GstElement *element_old;
     g_object_get (self->priv->machine, "machine", &element_old, NULL);
-    g_signal_handlers_disconnect_by_func (
-      element_old, on_custom_gfx_present, (gpointer) self);
     g_signal_handlers_disconnect_by_func (
       element_old, on_custom_gfx_invalidated, (gpointer) self);
     g_object_unref(element_old);
@@ -1667,7 +1668,8 @@ bt_machine_canvas_item_init (BtMachineCanvasItem * self)
   g_mutex_init (&self->priv->custom_gfx_lock);
 
   self->priv->image_custom_gfx = clutter_image_new ();
-  on_custom_gfx_present (self->priv->machine, 0, 0, NULL, self);
+
+  update_custom_graphics (self, 0, 0, NULL);
 }
 
 static void
